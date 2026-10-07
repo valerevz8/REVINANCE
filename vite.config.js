@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: { importScripts: ['push-handler.js'] },
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
         name: 'Revelect Finance Tracker',
