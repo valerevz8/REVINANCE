@@ -8,10 +8,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: { importScripts: ['push-handler.js'] },
-      includeAssets: ['apple-touch-icon.png'],
+      includeAssets: ['apple-touch-icon.png', 'og-image.png'],
       manifest: {
-        name: 'Revelect Finance Tracker',
-        short_name: 'Revelect Finance',
+        name: 'REVINANCE',
+        short_name: 'REVINANCE',
         description: 'Personal finance tracker — income, expenses, debt, and investment planning.',
         theme_color: '#0d0b09',
         background_color: '#0d0b09',
@@ -20,7 +20,7 @@ export default defineConfig({
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
