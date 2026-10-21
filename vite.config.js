@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: { importScripts: ['push-handler.js'] },
-      includeAssets: ['apple-touch-icon.png', 'og-image.png'],
+      includeAssets: ['apple-touch-icon.png', 'og-image.png', 'favicon.ico', 'favicon-32.png', 'favicon-64.png'],
       manifest: {
         name: 'REVINANCE',
         short_name: 'REVINANCE',
