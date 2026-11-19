@@ -7,7 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      workbox: { importScripts: ['push-handler.js'] },
+      workbox: {
+        importScripts: ['push-handler.js'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // the main bundle passed the 2 MiB default
+        globIgnores: ['**/pdf.worker*', '**/xlsx-*.js', '**/pdf-*.js'], // statement-import libraries load on demand, not precached
+      },
       includeAssets: ['apple-touch-icon.png', 'og-image.png', 'favicon.ico', 'favicon-32.png', 'favicon-64.png'],
       manifest: {
         name: 'REVINANCE',
