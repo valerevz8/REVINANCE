@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ComposedChart, Line, Legend, Area, ReferenceLine } from 'recharts';
 import { Palette, Sigma, Upload, Paperclip, LayoutGrid, RotateCcw, ArrowUp, Clock, Info, ArrowLeftRight, ArrowDown, Lock, Plus, Trash2, TrendingUp, TrendingDown, Wallet, CreditCard, PiggyBank, PieChart as PieIcon, Table as TableIcon, Globe, X, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, AlertCircle, CheckCircle2, LogOut, Eye, EyeOff, Sun, Moon, Pencil, Share2, FileText, Download, Utensils, Home, Car, Film, Receipt, HeartPulse, Dumbbell, ShoppingBag, MoreHorizontal, Banknote, Laptop, Video, Landmark, Repeat, Mail, Mic, Plane, GraduationCap, Users, PawPrint, Briefcase, Coins, BarChart3, Zap, Bitcoin, LineChart as LineChartIcon, Maximize2, Minimize2, Camera, ImagePlus, HeartHandshake, Coffee, RefreshCw, Fingerprint, ChevronUp, ChevronDown, Link2, Megaphone, Package, Bike, Gift, Store, Star, Flame, Trophy, CalendarHeart, Pin, History } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -826,6 +826,12 @@ function billingRegion() {
     return 'INTL';
   } catch (e) { return APP_CCY === 'IDR' ? 'ID' : 'INTL'; }
 }
+const PRO_NUM = { idr: { m: 39000, y: 399000 }, usd: { m: 7.99, y: 79.99 } };
+const proSaving = () => { const k = billingRegion() === 'ID' ? 'idr' : 'usd'; const n = PRO_NUM[k]; const full = n.m * 12; const save = full - n.y; const fmt = (v) => k === 'idr' ? 'Rp' + Math.round(v).toLocaleString('id-ID') : '$' + v.toFixed(2); return { pct: Math.round(save / full * 100), save: fmt(save), full: fmt(full) }; };
+const BRIDGE_STR = {
+  id: { title: 'Revinance Pro', head: 'Atur uang dengan tenang, mulai dari sini.', pick: 'Pilih paket', monthly: 'Bulanan', yearly: 'Tahunan', best: 'Paling hemat', perMonth: '/ bulan', perYear: '/ tahun', savePct: (p) => `Hemat ${p}%`, saveLine: (a, b) => `Pilih Tahunan dan hemat ${a} dibanding 12 kali bayar bulanan (${b}).`, monthlyLine: (a) => `Tahunan lebih hemat ${a}. Geser ke Tahunan?`, what: 'Yang kamu dapat dengan Pro', cta: 'Lanjut ke Pembayaran', later: 'Nanti saja' },
+  en: { title: 'Revinance Pro', head: 'Manage money calmly, starting here.', pick: 'Choose a plan', monthly: 'Monthly', yearly: 'Yearly', best: 'Best value', perMonth: '/ month', perYear: '/ year', savePct: (p) => `Save ${p}%`, saveLine: (a, b) => `Go Yearly and save ${a} versus 12 monthly payments (${b}).`, monthlyLine: (a) => `Yearly saves ${a}. Switch to Yearly?`, what: 'What you get with Pro', cta: 'Continue to Payment', later: 'Maybe later' },
+};
 const proPrices = () => PRO_PRICES[billingRegion() === 'ID' ? 'idr' : 'usd'];
 const ACC_STR = {
   id: {
@@ -1829,8 +1835,11 @@ function mapSavingGoalRow(row) {
     isEmergency: row.is_emergency === true,
   };
 }
+function sortAccounts(list) { // saved order first (sort_order), rows without one after, oldest first
+  return list.map((a, i) => ({ a, i })).sort((x, y) => { const sx = x.a.sortOrder, sy = y.a.sortOrder; if (sx != null && sy != null && sx !== sy) return sx - sy; if (sx != null && sy == null) return -1; if (sx == null && sy != null) return 1; return x.i - y.i; }).map(o => o.a);
+}
 function mapAccountRow(row) {
-  return { id: row.id, name: row.name, type: row.type, balance: Number(row.balance), currency: isCcy(row.currency) ? row.currency : 'IDR', createdAt: row.created_at || null, cardStyle: row.card_style && typeof row.card_style === 'object' ? row.card_style : null };
+  return { id: row.id, name: row.name, type: row.type, balance: Number(row.balance), currency: isCcy(row.currency) ? row.currency : 'IDR', createdAt: row.created_at || null, sortOrder: Number.isFinite(Number(row.sort_order)) && row.sort_order !== null ? Number(row.sort_order) : null, cardStyle: row.card_style && typeof row.card_style === 'object' ? row.card_style : null };
 }
 function mapRecurringRow(row) {
   return {
@@ -2880,7 +2889,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
       setDisplayName(settingsRes.data?.display_name || '');
       setSpaceName(settingsRes.data?.space_name || '');
       setAvatarPath(settingsRes.data?.avatar_path || null);
-      if (accountRes.data) setAccounts(accountRes.data.map(mapAccountRow));
+      if (accountRes.data) setAccounts(sortAccounts(accountRes.data.map(mapAccountRow)));
       if (recurringRes.data) setRecurringItems(recurringRes.data.map(mapRecurringRow).filter(r => r.type !== 'debt_payment' && !r.debtId)); // debts own their schedule; legacy debt rows never show
       setLoaded(true);
     })();
@@ -3872,9 +3881,21 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
   async function addAccount(a) {
     const { data, error } = await supabase.from('finance_accounts').insert({
       user_id: userId, name: a.name, type: a.type, balance: a.balance, currency: isCcy(a.currency) ? a.currency : 'IDR',
+      sort_order: accountsRaw.reduce((m, x) => Math.max(m, x.sortOrder != null ? x.sortOrder : 0), accountsRaw.length) + 1,
     }).select().single();
     if (!error) setAccounts(prev => [...prev, mapAccountRow(data)]);
     return !error;
+  }
+  async function reorderAccount(id, dir) { // swap with the neighbour, optimistic, persists the new 0..n order
+    const list = accountsRaw; const i = list.findIndex(x => x.id === id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= list.length) return false;
+    const next = list.slice(); [next[i], next[j]] = [next[j], next[i]];
+    const withOrder = next.map((x, k) => ({ ...x, sortOrder: k }));
+    setAccounts(withOrder);
+    const changed = withOrder.filter((x, k) => list[k].id !== x.id || list.find(y => y.id === x.id).sortOrder !== x.sortOrder);
+    const results = await Promise.all(changed.map(x => supabase.from('finance_accounts').update({ sort_order: x.sortOrder }).eq('id', x.id)));
+    if (results.some(r => r && r.error)) { setAccounts(list); rvSaved(false, APP_LANG === 'id' ? 'Urutan kartu gagal disimpan.' : 'Could not save the card order.'); return false; }
+    return true;
   }
   async function updateAccount(a) {
     const { data, error } = await supabase.from('finance_accounts').update({
@@ -4146,7 +4167,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
             debts={debts} budgets={budgets} investPlan={investPlan} investBudgets={investBudgets} totalDebtRemaining={totalDebtRemaining} monthLabel={monthLabel}
             accounts={accounts} onAddAccount={() => { setEditingAccount(null); setShowAccountModal(true); }}
             onEditAccount={(a) => { setEditingAccount(a); setShowAccountModal(true); }} onDeleteAccount={deleteAccount}
-            onViewAccountDetail={(a) => setViewingAccount(a)} onTransfer={() => setShowTransfer(true)} onStyleAccount={updateAccountStyle}
+            onViewAccountDetail={(a) => setViewingAccount(a)} onTransfer={() => setShowTransfer(true)} onStyleAccount={updateAccountStyle} onMoveAccount={reorderAccount}
             onEditInvestPlan={() => setShowInvestPlanModal(true)} onDeleteInvestCat={(cat) => setConfirmDeleteInvestCat(cat)}
             onEditInvestCat={(cat) => setEditingInvestCat({ cat, cell: investBudgetsRaw[cat] || { amount: 0, currency: APP_CCY } })}
             onAddInvestContribution={(cat) => { setEditingTx({ type: 'investment', category: cat }); setShowTxModal(true); }}
@@ -4952,6 +4973,7 @@ function TripDonut({ S, t, trip, st }) {
 
 function TravelHome({ t, lang, trips, accounts, transactions, trip, tripView, onTripView, onSelectTrip, onSaveTrip, onDeleteTrip, onSetStatus, onAttach, onDetach, onAddExpense, onEditTx }) {
   const S = TRV_STR[lang] || TRV_STR.en;
+  const revealed = useScrollReveal();
   const today = todayISO();
   const [tripModal, setTripModal] = useState(null); // null | 'new' | trip
   const [attachOpen, setAttachOpen] = useState(false);
@@ -4986,7 +5008,7 @@ function TravelHome({ t, lang, trips, accounts, transactions, trip, tripView, on
   return (
     <div className="fc-trip">
       {completedCount > 0 && (
-        <div className="fc-trip-viewsw" data-testid="trip-viewsw" role="group">
+        <div className={`fc-trip-viewsw ${revealed ? '' : 'fc-trip-viewsw-hide'}`} data-testid="trip-viewsw" role="group">
           <button type="button" data-testid="trip-view-active" aria-label={S.active} aria-pressed={tripView !== 'completed'} className={`fc-trip-viewsw-btn ${tripView !== 'completed' ? 'fc-trip-viewsw-on' : ''}`} onClick={() => onTripView('active')}><Plane size={16} /></button>
           <button type="button" data-testid="trip-view-history" aria-label={`${S.history} (${completedCount})`} aria-pressed={tripView === 'completed'} className={`fc-trip-viewsw-btn ${tripView === 'completed' ? 'fc-trip-viewsw-on' : ''}`} onClick={() => onTripView('completed')}><History size={16} /><i className="fc-trip-viewsw-n">{completedCount}</i></button>
         </div>
@@ -5596,6 +5618,23 @@ function HabitPanel({ lang, transactions, joinedAt, weekStart }) {
   );
 }
 
+function useScrollReveal() { // true = show: scrolling down reveals, scrolling up (or back at the top) hides; short pages always show
+  const [show, setShow] = useState(true);
+  useEffect(() => {
+    const last = new WeakMap();
+    const posOf = (tg) => (!tg || tg === document || tg === document.documentElement || tg === document.body) ? (window.scrollY || document.documentElement.scrollTop || 0) : (tg.scrollTop || 0);
+    const onScroll = (e) => {
+      const tg = e.target; const y = posOf(tg); const prev = last.has(tg) ? last.get(tg) : y; last.set(tg, y);
+      if (y <= 24) { setShow(false); return; }
+      const d = y - prev; if (d > 4) setShow(true); else if (d < -4) setShow(false);
+    };
+    const el = document.scrollingElement || document.documentElement;
+    setShow(!(el.scrollHeight > el.clientHeight + 8) || posOf(document) > 24);
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => window.removeEventListener('scroll', onScroll, { capture: true });
+  }, []);
+  return show;
+}
 function HomeModeSwitch({ lang, mode, onChange, proLocked }) {
   const S = TRV_STR[lang] || TRV_STR.en;
   return (
@@ -7967,8 +8006,8 @@ function ZeroBasedCard({ lang, income, budgets, investBudgets, debts, savingsTar
    Each account may carry card_style: { mode: 'solid'|'gradient'|'template'|'image', color, color2, angle, template, image, hideIcon, hideName, hideType }.
    No style = the default Revinance sand/obsidian glass. Templates are original Revinance patterns (no bank or brand artwork). */
 const WALLET_STR = {
-  id: { total: 'Total saldo', nAcc: (n) => `${n} akun`, detail: 'Detail', color: 'Warna kartu', edit: 'Ubah', del: 'Hapus', title: 'Warna kartu', solid: 'Polos', grad: 'Gradien', tpl: 'Template', dir: 'Arah gradien', ready: 'Gradien siap pakai', palette: 'Palet warna', hex: 'Warna bebas (hex)', c1: 'Warna 1', c2: 'Warna 2', show: 'Tampilan kartu', hideIcon: 'Sembunyikan ikon', hideName: 'Sembunyikan nama', hideType: 'Sembunyikan tipe', save: 'Simpan', reset: 'Reset ke default', upload: 'Unggah gambar', uploadNote: 'Gambar diperkecil otomatis dan disimpan di akunmu.', uploadFail: 'Gambar tidak bisa dibaca. Coba file lain.', tplNote: 'Template bergaya Revinance. Atau pakai gambarmu sendiri.', saved: 'Warna kartu disimpan.', failed: 'Warna kartu gagal disimpan. Coba lagi.' },
-  en: { total: 'Total balance', nAcc: (n) => `${n} account${n === 1 ? '' : 's'}`, detail: 'Details', color: 'Card color', edit: 'Edit', del: 'Delete', title: 'Card color', solid: 'Solid', grad: 'Gradient', tpl: 'Template', dir: 'Gradient direction', ready: 'Ready-made gradients', palette: 'Color palette', hex: 'Custom color (hex)', c1: 'Color 1', c2: 'Color 2', show: 'Card display', hideIcon: 'Hide icon', hideName: 'Hide name', hideType: 'Hide type', save: 'Save', reset: 'Reset to default', upload: 'Upload image', uploadNote: 'The image is shrunk automatically and saved to your account.', uploadFail: 'Could not read that image. Try another file.', tplNote: 'Revinance-style templates. Or use your own image.', saved: 'Card color saved.', failed: 'Could not save the card color. Please try again.' },
+  id: { total: 'Total saldo', nAcc: (n) => `${n} akun`, detail: 'Detail', color: 'Warna kartu', edit: 'Ubah', del: 'Hapus', title: 'Warna kartu', solid: 'Polos', grad: 'Gradien', tpl: 'Template', dir: 'Arah gradien', ready: 'Gradien siap pakai', palette: 'Palet warna', hex: 'Warna bebas (hex)', c1: 'Warna 1', c2: 'Warna 2', show: 'Tampilan kartu', hideIcon: 'Sembunyikan ikon', hideName: 'Sembunyikan nama', hideType: 'Sembunyikan tipe', pIcon: 'Ikon', pName: 'Nama', pType: 'Tipe', up: 'Naikkan', down: 'Turunkan', hideBal: 'Sembunyikan saldo', showBal: 'Tampilkan saldo', save: 'Simpan', reset: 'Reset ke default', upload: 'Unggah gambar', uploadNote: 'Gambar diperkecil otomatis dan disimpan di akunmu.', uploadFail: 'Gambar tidak bisa dibaca. Coba file lain.', tplNote: 'Template bergaya Revinance. Atau pakai gambarmu sendiri.', saved: 'Warna kartu disimpan.', failed: 'Warna kartu gagal disimpan. Coba lagi.' },
+  en: { total: 'Total balance', nAcc: (n) => `${n} account${n === 1 ? '' : 's'}`, detail: 'Details', color: 'Card color', edit: 'Edit', del: 'Delete', title: 'Card color', solid: 'Solid', grad: 'Gradient', tpl: 'Template', dir: 'Gradient direction', ready: 'Ready-made gradients', palette: 'Color palette', hex: 'Custom color (hex)', c1: 'Color 1', c2: 'Color 2', show: 'Card display', hideIcon: 'Hide icon', hideName: 'Hide name', hideType: 'Hide type', pIcon: 'Icon', pName: 'Name', pType: 'Type', up: 'Move up', down: 'Move down', hideBal: 'Hide balance', showBal: 'Show balance', save: 'Save', reset: 'Reset to default', upload: 'Upload image', uploadNote: 'The image is shrunk automatically and saved to your account.', uploadFail: 'Could not read that image. Try another file.', tplNote: 'Revinance-style templates. Or use your own image.', saved: 'Card color saved.', failed: 'Could not save the card color. Please try again.' },
 };
 const WALLET_TEMPLATES = [
   { id: 'sand', n: ['Sand Glass', 'Sand Glass'], ink: 'dark', css: 'radial-gradient(120% 85% at 0% 0%, rgba(255,255,255,0.5), transparent 65%), linear-gradient(145deg,#E6D9C3 0%,#CDBDA3 48%,#A7957C 100%)' },
@@ -7983,9 +8022,29 @@ const WALLET_TEMPLATES = [
   { id: 'lines', n: ['Garis', 'Lines'], ink: 'light', css: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 14px), linear-gradient(145deg,#2F2A24,#0C0A08)' },
   { id: 'dots', n: ['Titik', 'Dots'], ink: 'light', css: 'radial-gradient(rgba(255,255,255,0.14) 1.5px, transparent 1.6px) 0 0/14px 14px, linear-gradient(145deg,#1F3A33,#0E1F1B)' },
   { id: 'grid', n: ['Grid', 'Grid'], ink: 'dark', css: 'linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px) 0 0/18px 18px, linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px) 0 0/18px 18px, linear-gradient(145deg,#EFE7D8,#D7C9B1)' },
+  { id: 'champagne', n: ['Champagne', 'Champagne'], ink: 'dark', css: 'radial-gradient(100% 80% at 0% 0%, #FFF6E0, transparent 60%), linear-gradient(150deg,#EAD9B5,#CBB083 55%,#A88B5A)' },
+  { id: 'graphite', n: ['Graphite', 'Graphite'], ink: 'light', css: 'radial-gradient(90% 70% at 100% 0%, rgba(255,255,255,0.14), transparent 60%), linear-gradient(150deg,#4A4A4F,#26262B 55%,#121215)' },
+  { id: 'emerald', n: ['Emerald', 'Emerald'], ink: 'light', css: 'radial-gradient(80% 60% at 90% 0%, rgba(120,230,190,0.35), transparent 60%), linear-gradient(145deg,#0E4D3F,#08352C 55%,#04201A)' },
+  { id: 'sapphire', n: ['Sapphire', 'Sapphire'], ink: 'light', css: 'radial-gradient(80% 60% at 90% 0%, rgba(140,180,255,0.4), transparent 60%), linear-gradient(145deg,#1E3A8A,#14275E 55%,#0A1538)' },
+  { id: 'amethyst', n: ['Amethyst', 'Amethyst'], ink: 'light', css: 'radial-gradient(80% 60% at 90% 0%, rgba(210,170,255,0.35), transparent 60%), linear-gradient(145deg,#5B3A8C,#3A2360 55%,#1E1236)' },
+  { id: 'bordeaux', n: ['Bordeaux', 'Bordeaux'], ink: 'light', css: 'radial-gradient(80% 60% at 90% 0%, rgba(255,170,170,0.3), transparent 60%), linear-gradient(145deg,#7A1F2E,#4F121D 55%,#2A0A10)' },
+  { id: 'pearl', n: ['Pearl', 'Pearl'], ink: 'dark', css: 'radial-gradient(100% 80% at 0% 100%, rgba(255,255,255,0.7), transparent 60%), linear-gradient(145deg,#F4F1EA,#DDD7CC 55%,#BFB8AA)' },
+  { id: 'titanium', n: ['Titanium', 'Titanium'], ink: 'dark', css: 'radial-gradient(90% 70% at 20% 0%, rgba(255,255,255,0.4), transparent 60%), linear-gradient(135deg,#C9CCD1,#8F949B 50%,#5E6269)' },
+  { id: 'copper', n: ['Tembaga', 'Copper'], ink: 'light', css: 'radial-gradient(90% 70% at 100% 0%, rgba(255,214,170,0.4), transparent 60%), linear-gradient(145deg,#D69A6B,#A4623A 55%,#6E3A1F)' },
+  { id: 'moss', n: ['Lumut', 'Moss'], ink: 'light', css: 'radial-gradient(90% 70% at 0% 0%, rgba(220,240,160,0.25), transparent 60%), linear-gradient(145deg,#5E6B3E,#3B4527 55%,#232A16)' },
+  { id: 'slate', n: ['Slate', 'Slate'], ink: 'light', css: 'radial-gradient(90% 70% at 100% 100%, rgba(255,255,255,0.14), transparent 60%), linear-gradient(145deg,#64748B,#3B4658 55%,#1F2733)' },
+  { id: 'noirgold', n: ['Noir Gold', 'Noir Gold'], ink: 'light', css: 'repeating-linear-gradient(90deg, rgba(201,163,92,0.14) 0 1px, transparent 1px 9px), radial-gradient(80% 60% at 100% 0%, rgba(201,163,92,0.35), transparent 60%), linear-gradient(160deg,#16120C,#050403)' },
+  { id: 'carbon', n: ['Carbon', 'Carbon'], ink: 'light', css: 'linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0/8px 8px, linear-gradient(-45deg, rgba(255,255,255,0.05) 25%, transparent 25%) 0 0/8px 8px, linear-gradient(145deg,#1B1B1D,#0A0A0B)' },
+  { id: 'pinstripe', n: ['Pinstripe', 'Pinstripe'], ink: 'dark', css: 'repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 7px), linear-gradient(145deg,#E9E2D3,#CFC4AE)' },
+  { id: 'dusk', n: ['Senja', 'Dusk'], ink: 'light', css: 'radial-gradient(90% 70% at 100% 100%, rgba(224,168,111,0.55), transparent 60%), linear-gradient(160deg,#3D2C4F,#6E3F57 60%,#A86A5F)' },
+  { id: 'dunes', n: ['Bukit Pasir', 'Sand Hills'], ink: 'dark', css: 'radial-gradient(120% 60% at 50% 120%, rgba(255,255,255,0.28), transparent 60%), radial-gradient(100% 50% at 20% -10%, rgba(0,0,0,0.18), transparent 60%), linear-gradient(145deg,#B7A58A,#8B7858)' },
+  { id: 'mint', n: ['Mint Embun', 'Dew Mint'], ink: 'dark', css: 'radial-gradient(90% 70% at 0% 0%, rgba(255,255,255,0.55), transparent 60%), linear-gradient(145deg,#CFE3D6,#9FC1AE 55%,#6F9985)' },
 ];
-const WALLET_GRADIENTS = [['#E6D9C3', '#A7957C'], ['#3B3631', '#000000'], ['#7C9A72', '#2F4A2E'], ['#5B8FB9', '#1F3A5F'], ['#D9A7A0', '#7A4A58'], ['#F6A56B', '#8A2C1C'], ['#8E7CC3', '#2D2A5A'], ['#2C5364', '#0F2027']];
-const WALLET_PALETTE = ['#E6D9C3', '#CDBDA3', '#A7957C', '#7C9A72', '#4E6B4A', '#5B8FB9', '#2B4C7E', '#8E7CC3', '#D9A7A0', '#C98F4F', '#7A2020', '#3B3631', '#17140F', '#000000'];
+const WALLET_GRADIENTS = [['#E6D9C3', '#A7957C'], ['#3B3631', '#000000'], ['#7C9A72', '#2F4A2E'], ['#5B8FB9', '#1F3A5F'], ['#D9A7A0', '#7A4A58'], ['#F6A56B', '#8A2C1C'], ['#8E7CC3', '#2D2A5A'], ['#2C5364', '#0F2027'],
+  ['#F1E4C8', '#B8935A'], ['#C9CCD1', '#4B4F57'], ['#0E4D3F', '#04201A'], ['#1E3A8A', '#0A1538'], ['#5B3A8C', '#1E1236'], ['#7A1F2E', '#2A0A10'], ['#D69A6B', '#6E3A1F'], ['#16120C', '#C9A35C'],
+  ['#3D2C4F', '#E0A86F'], ['#A8D0E6', '#2B4C7E'], ['#F3D5D0', '#8A5A5C'], ['#B7C7A3', '#4E6B4A'], ['#232526', '#414345'], ['#E6D9C3', '#3B3631'], ['#F6D365', '#8C6A3C'], ['#CFE3D6', '#4E6B5C'],
+  ['#4A3B2A', '#C9A35C'], ['#101820', '#4B6A88'], ['#6B4E71', '#D9B8A6'], ['#2B2B2B', '#8E8E8E']];
+const WALLET_PALETTE = ['#F1E4C8', '#E6D9C3', '#CDBDA3', '#A7957C', '#C9A35C', '#C98F4F', '#D69A6B', '#D9A7A0', '#B07A78', '#7A1F2E', '#4F121D', '#7C9A72', '#4E6B4A', '#0E4D3F', '#2C5364', '#5B8FB9', '#2B4C7E', '#1E3A8A', '#8E7CC3', '#5B3A8C', '#8F949B', '#3B3631', '#17140F', '#000000'];
 const WALLET_ANGLES = [[315, '↖'], [0, '↑'], [45, '↗'], [270, '←'], [90, '→'], [225, '↙'], [180, '↓'], [135, '↘']];
 const isHex = (v) => /^#[0-9a-fA-F]{6}$/.test(v || '');
 function hexLum(h) { if (!isHex(h)) return 0.5; const n = parseInt(h.slice(1), 16); const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255); }
@@ -7998,32 +8057,23 @@ function walletLook(st) {
   if (st.mode === 'image' && typeof st.image === 'string' && st.image.startsWith('data:image/')) return { bg: `linear-gradient(rgba(0,0,0,0.28), rgba(0,0,0,0.28)), url(${st.image}) center/cover no-repeat`, ink: 'light' };
   return null;
 }
-function WalletCard({ a, t, lang, focus, onFocus, onEdit, onDelete, onDetail, onColor, ai }) {
-  const W = WALLET_STR[lang] || WALLET_STR.en;
+function WalletCard({ a, t, lang, focus, onFocus, hidden }) {
   const st = a.cardStyle || {}; const look = walletLook(a.cardStyle);
   const AccIcon = ACCOUNT_TYPE_ICONS[a.type] || Landmark;
   const typeKey = (ACCOUNT_TYPES.find(x => x[0] === a.type) || [])[1];
   return (
     <div className={`fc-wcard ${focus ? 'fc-wcard-on' : ''} ${look ? 'fc-wcard-custom fc-wink-' + look.ink : ''}`} data-testid="acc-tile" data-focused={focus ? '1' : '0'}
-      style={{ ...(look ? { background: look.bg } : {}), zIndex: focus ? 50 : ai + 1 }} onClick={onFocus} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') onFocus(); }}>
+      style={look ? { background: look.bg } : undefined} onClick={onFocus} role="button" tabIndex={0} aria-expanded={!!focus} onKeyDown={(e) => { if (e.key === 'Enter') onFocus(); }}>
       <div className="fc-wcard-strip">
         <span className="fc-wcard-id">
           {!st.hideIcon && <span className="fc-acc-tile-icon"><AccIcon size={16} /></span>}
           {!st.hideName && <span className="fc-wcard-name" data-testid="acc-name">{a.name}</span>}
         </span>
-        <span className="fc-wcard-bal" data-testid="acc-bal">{fmtAcc(a)}</span>
+        <span className="fc-wcard-bal" data-testid="acc-bal">{hidden ? '••••••' : fmtAcc(a)}</span>
       </div>
       <div className="fc-wcard-body">
-        <div className="fc-wcard-meta">
-          {!st.hideType && typeKey && <span className="fc-wcard-type">{t[typeKey]}</span>}
-          {a.currency !== APP_CCY && <span className="fc-wcard-sub">{a.currency} · ≈ {fmtIDR(a.balance)}</span>}
-        </div>
-        <div className="fc-wcard-actions">
-          <button type="button" className="fc-wcard-act" data-testid="acc-detail" onClick={(e) => { e.stopPropagation(); onDetail(); }}><Eye size={13} /> {t.seeDetails || W.detail}</button>
-          <button type="button" className="fc-wcard-act" data-testid="acc-color" onClick={(e) => { e.stopPropagation(); onColor(); }}><Palette size={13} /> {W.color}</button>
-          <button type="button" className="fc-wcard-act" aria-label="Edit" onClick={(e) => { e.stopPropagation(); onEdit(); }}><Pencil size={13} /> {W.edit}</button>
-          <button type="button" className="fc-wcard-act fc-wcard-act-icon" aria-label="Delete" onClick={(e) => { e.stopPropagation(); onDelete(); }}><Trash2 size={13} /></button>
-        </div>
+        {!st.hideType && typeKey && <span className="fc-wcard-type">{t[typeKey]}</span>}
+        {a.currency !== APP_CCY && <span className="fc-wcard-sub">{a.currency}{hidden ? '' : ` · ≈ ${fmtIDR(a.balance)}`}</span>}
       </div>
     </div>
   );
@@ -8077,12 +8127,16 @@ function CardStyleSheet({ a, t, lang, onClose, onSave }) {
     const ok = await onSave(out); setBusy(false);
     if (ok === false) setErr(W.failed);
   }
-  const Tog = ({ v, set, label, tid }) => <label className="fc-wsheet-tog"><input type="checkbox" checked={v} onChange={(e) => set(e.target.checked)} data-testid={tid} /><span>{label}</span></label>;
+  const Pill = ({ v, set, label, tid }) => <button type="button" className="fc-wpill" aria-pressed={!v} data-testid={tid} onClick={() => set(!v)}><span className="fc-wpill-dot" aria-hidden="true" />{label}</button>;
   return (
     <div className="fc-modal-backdrop" style={{ zIndex: 1300 }} onClick={onClose}>
       <div className="fc-modal fc-wsheet" role="dialog" aria-label={W.title} data-testid="card-style-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="fc-modal-header"><span>{W.title}</span><button type="button" className="fc-icon-btn" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
-        <div className="fc-wsheet-prev" data-testid="card-style-preview"><WalletCard a={prev} t={t} lang={lang} focus onFocus={() => {}} onEdit={() => {}} onDelete={() => {}} onDetail={() => {}} onColor={() => {}} ai={0} /></div>
+        <div className="fc-wsheet-top">
+          <div className="fc-modal-header"><span>{W.title}</span><button type="button" className="fc-icon-btn" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
+          <div className="fc-wsheet-prev" data-testid="card-style-preview"><WalletCard a={prev} t={t} lang={lang} focus onFocus={() => {}} /></div>
+          <div className="fc-wsheet-label" style={{ margin: '12px 0 6px' }}>{W.show}</div>
+          <div className="fc-wpills" data-testid="wsheet-pills"><Pill v={hideIcon} set={setHideIcon} label={W.pIcon} tid="whide-icon" /><Pill v={hideName} set={setHideName} label={W.pName} tid="whide-name" /><Pill v={hideType} set={setHideType} label={W.pType} tid="whide-type" /></div>
+        </div>
         <div className="fc-segmented" role="tablist" style={{ margin: '12px 0' }}>
           {[['solid', W.solid], ['gradient', W.grad], ['template', W.tpl]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} data-testid={`wtab-${k}`} className={`fc-segmented-btn ${tab === k ? 'fc-segmented-active' : ''}`} onClick={() => setTab(k)}>{l}</button>)}
         </div>
@@ -8117,8 +8171,6 @@ function CardStyleSheet({ a, t, lang, onClose, onSave }) {
             <div className="fc-field-note" style={{ margin: '8px 0 0' }}>{W.uploadNote}</div>
           </div>
         )}
-        <div className="fc-wsheet-label" style={{ marginTop: 14 }}>{W.show}</div>
-        <div className="fc-wsheet-togs"><Tog v={hideIcon} set={setHideIcon} label={W.hideIcon} tid="whide-icon" /><Tog v={hideName} set={setHideName} label={W.hideName} tid="whide-name" /><Tog v={hideType} set={setHideType} label={W.hideType} tid="whide-type" /></div>
         {err && <div className="fc-field-note" role="alert" style={{ color: '#7A2020', margin: '8px 0 0' }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <button type="button" className="fc-btn-ghost" style={{ flex: 1, justifyContent: 'center' }} data-testid="wsheet-reset" onClick={() => save(true)}>{W.reset}</button>
@@ -8128,7 +8180,7 @@ function CardStyleSheet({ a, t, lang, onClose, onSave }) {
     </div>
   );
 }
-function Review({ section = 'overview', t, lang, transactions, monthTx, totals, health, selectedMonth, debts, budgets, investPlan, investBudgets, totalDebtRemaining, monthLabel, accounts, onAddAccount, onEditAccount, onDeleteAccount, onViewAccountDetail, onTransfer, onStyleAccount, onEditInvestPlan, onDeleteInvestCat, onEditInvestCat, onAddInvestContribution, savingGoals, goalDeposits, onAddGoal, onEditGoal, onDeleteGoal, onContributeGoal, onWithdrawGoal, onWithdrawInvest, weekStart, savingsTarget, onOpenSavingsTarget, emergencyGoal, avgMonthlyExpenseIdr, onOpenEmergency, allocPlan, onAllocChange }) {
+function Review({ section = 'overview', t, lang, transactions, monthTx, totals, health, selectedMonth, debts, budgets, investPlan, investBudgets, totalDebtRemaining, monthLabel, accounts, onAddAccount, onEditAccount, onDeleteAccount, onViewAccountDetail, onTransfer, onStyleAccount, onMoveAccount, onEditInvestPlan, onDeleteInvestCat, onEditInvestCat, onAddInvestContribution, savingGoals, goalDeposits, onAddGoal, onEditGoal, onDeleteGoal, onContributeGoal, onWithdrawGoal, onWithdrawInvest, weekStart, savingsTarget, onOpenSavingsTarget, emergencyGoal, avgMonthlyExpenseIdr, onOpenEmergency, allocPlan, onAllocChange }) {
   const [focusId, setFocusId] = useState(null); const [styleAcc, setStyleAcc] = useState(null);
   const investPct = investPlan > 0 ? Math.min(100, (totals.invested / investPlan) * 100) : 0;
   const netWorth = (accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
@@ -8178,25 +8230,58 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
   const W = WALLET_STR[lang] || WALLET_STR.en;
   const accList = accounts || [];
   const focusAcc = accList.find(a => a.id === focusId) || accList[0];
+  const [hideBal, setHideBal] = useState(() => { try { return localStorage.getItem('rv_hide_balance') === '1'; } catch (e) { return false; } });
+  const toggleHideBal = () => setHideBal(v => { const n = !v; try { localStorage.setItem('rv_hide_balance', n ? '1' : '0'); } catch (e) { /* ignore */ } return n; });
+  const stackRef = useRef(null); const snapRef = useRef(null);
+  const orderSig = accList.map(a => a.id).join('|');
+  const measureSlots = () => { const m = {}; if (stackRef.current) stackRef.current.querySelectorAll('[data-wid]').forEach(el => { m[el.getAttribute('data-wid')] = el.offsetTop; }); return m; };
+  useLayoutEffect(() => { // FLIP: slide cards from their old spot to the new one
+    const before = snapRef.current; snapRef.current = null;
+    if (!before || !stackRef.current) return;
+    stackRef.current.querySelectorAll('[data-wid]').forEach(el => {
+      const old = before[el.getAttribute('data-wid')]; const dy = old - el.offsetTop;
+      if (!dy || typeof el.animate !== 'function') return;
+      try { el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: 560, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' }); } catch (e) { /* ignore */ }
+    });
+  }, [orderSig]);
+  const moveCard = (id, dir) => { if (!onMoveAccount) return; snapRef.current = measureSlots(); onMoveAccount(id, dir); };
   const accountsCard = (
       <div className="fc-card fc-wallet">
         <div className="fc-wtotal" data-testid="wallet-total">
-          <div className="fc-wtotal-main">
+          <div className="fc-wtotal-top">
             <span className="fc-wtotal-label">{W.total}</span>
-            <span className="fc-wtotal-val" data-testid="wallet-total-val">{fmtIDR(netWorth)}</span>
-            <span className="fc-wtotal-sub">{t.accounts} · {W.nAcc(accList.length)}</span>
+            <button type="button" className="fc-weye" data-testid="wallet-eye" aria-pressed={hideBal} aria-label={hideBal ? W.showBal : W.hideBal} title={hideBal ? W.showBal : W.hideBal} onClick={toggleHideBal}>{hideBal ? <EyeOff size={16} /> : <Eye size={16} />}</button>
           </div>
-          <div className="fc-wtotal-actions">
-            {accList.length >= 2 && onTransfer && <button type="button" className="fc-wround" data-testid="open-transfer" aria-label={t.trButton} title={t.trButton} onClick={onTransfer}><ArrowLeftRight size={17} /></button>}
-            <button type="button" className="fc-wround" data-testid="add-account-btn" aria-label={t.addAccount} title={t.addAccount} onClick={onAddAccount}><Plus size={18} /></button>
+          <span className="fc-wtotal-val" data-testid="wallet-total-val">{hideBal ? 'Rp ••••••••' : fmtIDR(netWorth)}</span>
+          <div className="fc-wtotal-foot">
+            <span className="fc-wtotal-sub">{t.accounts} · {W.nAcc(accList.length)}</span>
+            <div className="fc-wtotal-actions">
+              {accList.length >= 2 && onTransfer && <button type="button" className="fc-wround" data-testid="open-transfer" aria-label={t.trButton} title={t.trButton} onClick={onTransfer}><ArrowLeftRight size={17} /></button>}
+              <button type="button" className="fc-wround" data-testid="add-account-btn" aria-label={t.addAccount} title={t.addAccount} onClick={onAddAccount}><Plus size={18} /></button>
+            </div>
           </div>
         </div>
         {accList.length === 0 ? <div className="fc-empty">{t.noAccounts}</div> : (
-          <div className="fc-wstack" data-testid="wallet-stack">
-            {accList.map((a, ai) => (
-              <WalletCard key={a.id} a={a} t={t} lang={lang} ai={ai} focus={!!focusAcc && focusAcc.id === a.id}
-                onFocus={() => setFocusId(a.id)} onEdit={() => onEditAccount(a)} onDelete={() => onDeleteAccount(a.id)} onDetail={() => onViewAccountDetail(a)} onColor={() => setStyleAcc(a)} />
-            ))}
+          <div className="fc-wstack" data-testid="wallet-stack" ref={stackRef}>
+            {accList.map((a, ai) => {
+              const on = !!focusAcc && focusAcc.id === a.id; const ti = on ? 0 : -1;
+              return (
+                <div className="fc-wslot" key={a.id} data-wid={a.id}>
+                  <WalletCard a={a} t={t} lang={lang} focus={on} hidden={hideBal} onFocus={() => setFocusId(a.id)} />
+                  <div className="fc-wbar" data-open={on ? '1' : '0'} aria-hidden={!on}>
+                    <div className="fc-wbar-in">
+                      <button type="button" className="fc-wbtn" data-testid="acc-detail" tabIndex={ti} aria-label={t.seeDetails || W.detail} title={t.seeDetails || W.detail} onClick={() => onViewAccountDetail(a)}><Receipt size={17} /></button>
+                      <button type="button" className="fc-wbtn" data-testid="acc-color" tabIndex={ti} aria-label={W.color} title={W.color} onClick={() => setStyleAcc(a)}><Palette size={17} /></button>
+                      <button type="button" className="fc-wbtn" data-testid="acc-edit" tabIndex={ti} aria-label="Edit" title={W.edit} onClick={() => onEditAccount(a)}><Pencil size={17} /></button>
+                      <button type="button" className="fc-wbtn" data-testid="acc-del" tabIndex={ti} aria-label="Delete" title={W.del} onClick={() => onDeleteAccount(a.id)}><Trash2 size={17} /></button>
+                      <span className="fc-wbar-sep" aria-hidden="true" />
+                      <button type="button" className="fc-wbtn" data-testid="acc-up" tabIndex={ti} disabled={ai === 0} aria-label={W.up} title={W.up} onClick={() => moveCard(a.id, -1)}><ChevronUp size={18} /></button>
+                      <button type="button" className="fc-wbtn" data-testid="acc-down" tabIndex={ti} disabled={ai === accList.length - 1} aria-label={W.down} title={W.down} onClick={() => moveCard(a.id, 1)}><ChevronDown size={18} /></button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
         {styleAcc && <CardStyleSheet a={accList.find(x => x.id === styleAcc.id) || styleAcc} t={t} lang={lang} onClose={() => setStyleAcc(null)} onSave={async (st) => { const ok = onStyleAccount ? await onStyleAccount(styleAcc.id, st) : false; if (ok) setStyleAcc(null); return ok; }} />}
@@ -9848,7 +9933,7 @@ function CodesBlock({ lang, isPro }) {
 }
 function AccountSheet({ initialPage, initialPeriod, initialOrder, lang, isPro, name, email, userId, proUntil, graceUntil, onClose }) {
   const A = ACC_STR[lang] || ACC_STR.en; const P = proPrices(); const region = billingRegion();
-  const [page, setPage] = useState(() => (billingPreview() && window.__RV_BILLING_RESULT) ? 'result' : (initialPage === 'result' && initialOrder) ? 'result' : (initialPage === 'checkout' || initialPage === 'billing') ? initialPage : 'main'); // main | plans | billing | checkout | result
+  const [page, setPage] = useState(() => (billingPreview() && window.__RV_BILLING_RESULT) ? 'result' : (initialPage === 'result' && initialOrder) ? 'result' : initialPage === 'checkout' ? 'pro' : initialPage === 'billing' ? 'billing' : 'main'); // main | pro (bridge) | plans | billing | checkout | result
   const [chkPlan, setChkPlan] = useState(initialPeriod === 'monthly' ? 'monthly' : 'yearly'); const [chkRef, setChkRef] = useState(() => { try { return localStorage.getItem('rv_ref') || ''; } catch (e) { return ''; } });
   const C = CHK_STR[lang] || CHK_STR.en;
   const [ready, setReady] = useState(false); // real payments are switched on server-side (Midtrans key set)
@@ -9893,12 +9978,13 @@ function AccountSheet({ initialPage, initialPeriod, initialOrder, lang, isPro, n
   const until = isPro ? fmtD(proUntil) : '';
   const List = ({ items }) => <ul className="fc-acc-list">{items.map((x, i) => <li key={i}><CheckCircle2 size={15} />{x}</li>)}</ul>;
   const Nav = ({ title, sub, onClick, testid }) => <button type="button" className="fc-acc-nav" onClick={onClick} data-testid={testid}><span><b>{title}</b>{sub && <small>{sub}</small>}</span><ChevronRight size={16} /></button>;
-  const headTitle = page === 'plans' ? A.plans : page === 'billing' ? A.billing : page === 'checkout' ? C.title : page === 'result' ? C.title : A.title;
+  const BR = BRIDGE_STR[lang] || BRIDGE_STR.en; const SV = proSaving();
+  const headTitle = page === 'pro' ? BR.title : page === 'plans' ? A.plans : page === 'billing' ? A.billing : page === 'checkout' ? C.title : page === 'result' ? C.title : A.title;
   return (
     <div className="fc-modal-backdrop" onClick={onClose}>
       <div className="fc-modal fc-modal-account" data-testid="account-modal" onClick={(e) => e.stopPropagation()}>
         <div className="fc-modal-header">
-          {page !== 'main' ? <button type="button" className="fc-icon-btn" onClick={() => setPage(page === 'checkout' ? 'plans' : 'main')} aria-label="Back" data-testid="account-back"><ChevronLeft size={18} /></button> : <span style={{ width: 28 }} />}
+          {page !== 'main' ? <button type="button" className="fc-icon-btn" onClick={() => setPage(page === 'checkout' ? (isPro || graceUntil ? 'plans' : 'pro') : 'main')} aria-label="Back" data-testid="account-back"><ChevronLeft size={18} /></button> : <span style={{ width: 28 }} />}
           <span>{headTitle}</span>
           <button type="button" className="fc-icon-btn" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
@@ -9947,10 +10033,36 @@ function AccountSheet({ initialPage, initialPeriod, initialOrder, lang, isPro, n
             <div className="fc-acc-price" data-testid="account-price"><span>{P.m}<small> {A.perMonth}</small></span><span>{P.y}<small> {A.perYear}</small></span></div>
             <div className="fc-field-note" style={{ margin: '0 0 8px' }}>{A.yearNote(P.ym)} · {A.priceFor(region)}</div>
             <List items={A.proList} />
-            {!isPro && <button type="button" className="fc-btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }} onClick={() => setPage('checkout')} data-testid="account-upgrade">{A.upgrade}</button>}
+            {!isPro && <button type="button" className="fc-btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }} onClick={() => setPage('pro')} data-testid="account-upgrade">{A.upgrade}</button>}
           </div>
           <div className="fc-field-note">{A.plansNote}</div>
         </>)}
+
+        {page === 'pro' && (
+          <div className="fc-bridge" data-testid="pro-bridge">
+            <div className="fc-bridge-hero"><img src="/pro-hero.jpg" alt="Revinance Pro" width="900" height="750" /><div className="fc-bridge-fade" /></div>
+            <div className="fc-bridge-head">{BR.head}</div>
+            <div className="fc-acc-title" style={{ marginTop: 14 }}>{BR.pick}</div>
+            <div className="fc-bridge-plans" role="radiogroup">
+              <button type="button" role="radio" aria-checked={chkPlan === 'monthly'} className={`fc-bridge-plan ${chkPlan === 'monthly' ? 'on' : ''}`} onClick={() => setChkPlan('monthly')} data-testid="bridge-monthly">
+                <span className="fc-bridge-plan-name">{BR.monthly}</span>
+                <span className="fc-bridge-price">{P.m}<small> {BR.perMonth}</small></span>
+              </button>
+              <button type="button" role="radio" aria-checked={chkPlan === 'yearly'} className={`fc-bridge-plan ${chkPlan === 'yearly' ? 'on' : ''}`} onClick={() => setChkPlan('yearly')} data-testid="bridge-yearly">
+                <span className="fc-bridge-badge">{BR.savePct(SV.pct)}</span>
+                <span className="fc-bridge-plan-name">{BR.yearly}</span>
+                <span className="fc-bridge-price">{P.y}<small> {BR.perYear}</small></span>
+                <span className="fc-bridge-was">{SV.full}</span>
+                <span className="fc-bridge-eq">{A.yearNote(P.ym)}</span>
+              </button>
+            </div>
+            <div className="fc-bridge-save" data-testid="bridge-save">{chkPlan === 'yearly' ? BR.saveLine(SV.save, SV.full) : BR.monthlyLine(SV.save)}</div>
+            <div className="fc-bridge-box"><div className="fc-bridge-boxhead">{BR.what}</div><List items={A.proList} /></div>
+            <div className="fc-bridge-cta">
+              <button type="button" className="fc-btn-primary" style={{ width: '100%', justifyContent: 'center' }} data-testid="bridge-cta" onClick={() => setPage('checkout')}>{BR.cta}</button>
+            </div>
+          </div>
+        )}
 
         {page === 'checkout' && (<>
           <div className="fc-acc-title" style={{ marginTop: 6 }}>{C.pickPlan}</div>
@@ -10414,9 +10526,9 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
               return (<>
                 <div className="fc-settings-row" style={{ cursor: 'default' }}>
                   <span>{TS.title}</span>
-                  <div className="fc-segmented" style={{ marginBottom: 0 }} role="tablist">
-                    <button type="button" role="tab" aria-selected={!on} data-testid="mode-daily" className={`fc-segmented-btn ${!on ? 'fc-segmented-active' : ''}`} onClick={() => onHomeMode('daily')}>{TS.daily}</button>
-                    <button type="button" role="tab" aria-selected={on} data-testid="mode-travel" className={`fc-segmented-btn ${on ? 'fc-segmented-active' : ''}`} onClick={() => { if (!isPro) { setTravelLock(true); return; } onHomeMode('travel'); }}>{TS.travel}{!isPro && <Lock size={12} className="fc-lock-ico" style={{ marginLeft: 5, verticalAlign: '-1px' }} aria-label="Pro" />}</button>
+                  <div className="fc-segmented fc-segmented-sm fc-mode-icons" style={{ marginBottom: 0 }} role="tablist" aria-label={TS.title}>
+                    <button type="button" role="tab" aria-selected={!on} aria-label={TS.daily} title={TS.daily} data-testid="mode-daily" className={`fc-segmented-btn ${!on ? 'fc-segmented-active' : ''}`} onClick={() => onHomeMode('daily')}><Wallet size={16} /></button>
+                    <button type="button" role="tab" aria-selected={on} aria-label={TS.travel} title={TS.travel} data-testid="mode-travel" className={`fc-segmented-btn ${on ? 'fc-segmented-active' : ''}`} onClick={() => { if (!isPro) { setTravelLock(true); return; } onHomeMode('travel'); }}><Plane size={16} />{!isPro && <Lock size={10} className="fc-lock-ico fc-mode-lock" aria-label="Pro" />}</button>
                   </div>
                 </div>
                 {on && isPro && (
@@ -14654,44 +14766,58 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-rt-h2 { margin-top: 18px; } .fc-rt > :first-child { margin-top: 0; }
 .fc-rt-p { margin-bottom: 12px; }
 /* Wallet: total card + stacked account cards */
-.fc-wallet { padding-bottom: 18px; }
-.fc-wtotal { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-radius: 20px; background: var(--fc-surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--fc-border); margin-bottom: 16px; }
-.fc-wtotal-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.fc-wtotal-label { font-size: 12px; opacity: 0.65; }
-.fc-wtotal-val { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fc-wtotal-sub { font-size: 11.5px; opacity: 0.55; }
+.fc-wallet { padding-bottom: 18px; --wease: cubic-bezier(0.32, 0.72, 0, 1); }
+.fc-wtotal { display: flex; flex-direction: column; gap: 4px; padding: 20px 20px 16px; border-radius: 24px; background: var(--fc-surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--fc-border); margin-bottom: 18px; }
+.fc-wtotal-top { display: flex; align-items: center; gap: 6px; }
+.fc-wtotal-label { font-size: 12.5px; opacity: 0.65; }
+.fc-weye { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fc-text); opacity: 0.7; cursor: pointer; transition: opacity .2s ease, transform .2s var(--wease); }
+.fc-weye:active { transform: scale(0.9); opacity: 1; }
+.fc-wtotal-val { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-wtotal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.fc-wtotal-sub { font-size: 12px; opacity: 0.55; min-width: 0; }
 .fc-wtotal-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.fc-wround { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--fc-surface); border: 1px solid var(--fc-border); color: var(--fc-text); cursor: pointer; }
+.fc-wround { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--fc-surface); border: 1px solid var(--fc-border); color: var(--fc-text); cursor: pointer; transition: transform .2s var(--wease); }
 .fc-wround:active { transform: scale(0.94); }
-.fc-wstack { display: flex; flex-direction: column; padding: 0 2px; }
-.fc-wcard { position: relative; overflow: hidden; border-radius: 22px; padding: 16px 18px; min-height: 168px; color: #000; cursor: pointer; margin-top: -18px; display: flex; flex-direction: column; justify-content: flex-start;
+.fc-wstack { position: relative; display: flex; flex-direction: column; padding: 0 2px; }
+.fc-wslot { position: relative; will-change: transform; }
+.fc-wcard { position: relative; overflow: hidden; border-radius: 22px; padding: 14px 18px; height: 78px; margin-bottom: -16px; color: #000; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; box-sizing: border-box;
   background: linear-gradient(145deg, #E6D9C3 0%, #CDBDA3 48%, #A7957C 100%); border: 1px solid rgba(255,255,255,0.38);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -6px 18px rgba(0,0,0,0.28); transition: transform 0.3s var(--fc-spring), box-shadow 0.3s ease; }
-.fc-wcard:first-child { margin-top: 0; }
-.fc-wcard-on { box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 14px 30px rgba(0,0,0,0.42); transform: translateY(-2px); }
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -5px 16px rgba(0,0,0,0.26);
+  transition: height .6s var(--wease), margin-bottom .6s var(--wease), box-shadow .6s var(--wease), transform .6s var(--wease); -webkit-tap-highlight-color: transparent; }
+.fc-wslot:last-child .fc-wcard { margin-bottom: 0; }
+.fc-wcard:active { transform: scale(0.985); }
+.fc-wcard-on { height: 142px; margin-bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 12px 28px rgba(0,0,0,0.38); }
 .fc-app[data-theme="light"] .fc-wcard:not(.fc-wcard-custom) { color: #D9CDB8; background: linear-gradient(145deg, #3B3631 0%, #17140F 50%, #000 100%); border: 1px solid rgba(217,205,184,0.22); }
 .fc-wcard-custom { border: 1px solid rgba(255,255,255,0.22); }
 .fc-wink-light { color: #F4EEE2; }
 .fc-wink-dark { color: #17140F; }
-.fc-wcard-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 66px; }
+.fc-wcard-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 50px; flex-shrink: 0; }
 .fc-wcard-id { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .fc-wcard-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-wcard-bal { font-size: 16px; font-weight: 700; white-space: nowrap; }
-.fc-wcard-body { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
-.fc-wcard-meta { display: flex; flex-direction: column; gap: 2px; min-height: 18px; }
+.fc-wcard-body { display: flex; flex-direction: column; gap: 2px; margin-top: auto; opacity: 0; transform: translateY(8px); transition: opacity .25s ease, transform .6s var(--wease); }
+.fc-wcard-on .fc-wcard-body { opacity: 1; transform: none; transition: opacity .45s ease .12s, transform .6s var(--wease) .05s; }
 .fc-wcard-type { font-size: 12px; opacity: 0.75; }
 .fc-wcard-sub { font-size: 11px; opacity: 0.65; }
-.fc-wcard-actions { display: none; flex-wrap: wrap; gap: 6px; }
-.fc-wcard-on .fc-wcard-actions { display: flex; }
-.fc-wcard:not(.fc-wcard-on) .fc-wcard-body { display: none; }
-.fc-wcard:not(.fc-wcard-on) { min-height: 0; padding-bottom: 24px; }
-.fc-wcard-on { padding-bottom: 22px; }
-.fc-wcard-act { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 7px 11px; border-radius: 999px; border: 1px solid currentColor; background: rgba(255,255,255,0.12); color: inherit; cursor: pointer; opacity: 0.9; }
-.fc-wcard-act-icon { padding: 7px 9px; }
-.fc-wsheet { max-width: 440px; max-height: 92vh; overflow-y: auto; }
+.fc-wbar { height: 0; opacity: 0; overflow: hidden; transform: translateY(-6px); transition: height .6s var(--wease), opacity .2s ease, transform .6s var(--wease); }
+.fc-wbar[data-open="1"] { height: 54px; opacity: 1; transform: none; transition: height .6s var(--wease), opacity .45s ease .15s, transform .6s var(--wease) .05s; }
+.fc-wbar-in { height: 54px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.fc-wbtn { width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--fc-surface-2, rgba(255,255,255,0.05)); border: 1px solid var(--fc-border); color: var(--fc-text); cursor: pointer; padding: 0; transition: transform .2s var(--wease), opacity .2s ease; }
+.fc-wbtn:active { transform: scale(0.92); }
+.fc-wbtn:disabled { opacity: 0.3; cursor: default; }
+.fc-wbar-sep { width: 1px; height: 20px; background: var(--fc-border); margin: 0 2px; }
+@media (prefers-reduced-motion: reduce) { .fc-wcard, .fc-wbar, .fc-wcard-body { transition: none !important; } }
+.fc-wsheet { max-width: 440px; max-height: 92vh; overflow-y: auto; padding-top: 0; }
+.fc-wsheet-top { position: sticky; top: 0; z-index: 5; background: var(--fc-surface); padding: 14px 0 12px; border-bottom: 1px solid var(--fc-border); margin-bottom: 8px; }
 .fc-wsheet-prev { padding: 0 2px; }
-.fc-wsheet-prev .fc-wcard { margin-top: 0; }
-.fc-wsheet-prev .fc-wcard-actions { display: none; }
+.fc-wsheet-prev .fc-wcard { height: 112px; margin-bottom: 0; cursor: default; }
+.fc-wsheet-prev .fc-wcard:active { transform: none; }
+.fc-wpills { display: flex; gap: 8px; }
+.fc-wpill { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border-radius: 999px; border: 1px solid var(--fc-border); background: var(--fc-surface-2, rgba(255,255,255,0.04)); color: var(--fc-text); opacity: 0.7; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .3s var(--wease), border-color .3s var(--wease), opacity .3s ease, transform .2s var(--wease); }
+.fc-wpill:active { transform: scale(0.96); }
+.fc-wpill[aria-pressed="true"] { opacity: 1; border-color: var(--fc-gold-bright, #C9A35C); background: rgba(201,163,92,0.16); }
+.fc-wpill-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; transition: background .3s ease; }
+.fc-wpill[aria-pressed="true"] .fc-wpill-dot { background: var(--fc-gold-bright, #C9A35C); border-color: var(--fc-gold-bright, #C9A35C); }
 .fc-wsheet-label { font-size: 12.5px; font-weight: 600; margin: 10px 0 6px; }
 .fc-wsheet-sw { display: flex; flex-wrap: wrap; gap: 8px; }
 .fc-wsheet-swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--fc-border); cursor: pointer; padding: 0; }
@@ -14709,8 +14835,30 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-wsheet-tpl { height: 64px; border-radius: 14px; border: 2px solid transparent; cursor: pointer; font-size: 11.5px; font-weight: 600; display: flex; align-items: flex-end; justify-content: flex-start; padding: 8px; text-align: left; }
 .fc-wsheet-tpl.on { border-color: var(--fc-gold-bright, #C9A35C); }
 .fc-wsheet-upload { flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: var(--fc-surface); border: 1px dashed var(--fc-border); color: var(--fc-text); }
-.fc-wsheet-togs { display: flex; flex-direction: column; gap: 8px; }
-.fc-wsheet-tog { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+/* Settings usage-mode capsule (icons) + Home travel capsule scroll reveal */
+.fc-mode-icons .fc-segmented-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 7px 18px; }
+.fc-mode-icons .fc-mode-lock { position: absolute; top: 3px; right: 5px; opacity: .7; }
+.fc-trip-viewsw { transition: opacity .7s cubic-bezier(0.32, 0.72, 0, 1), transform .7s cubic-bezier(0.32, 0.72, 0, 1); }
+.fc-trip-viewsw-hide { opacity: 0; transform: translateY(10px) scale(0.96); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .fc-trip-viewsw { transition: none; } }
+/* Pro bridge page */
+.fc-bridge-hero { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 6 / 5; background: #0d0b08; }
+.fc-bridge-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fc-bridge-fade { position: absolute; inset: auto 0 0 0; height: 38%; background: linear-gradient(to bottom, transparent, var(--fc-surface)); }
+.fc-bridge-head { font-size: 19px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.3; text-align: center; margin-top: 14px; padding: 0 6px; }
+.fc-bridge-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fc-bridge-plan { position: relative; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left; padding: 16px 14px 14px; border-radius: 16px; border: 1px solid var(--fc-border); background: var(--fc-surface2, var(--fc-surface)); color: var(--fc-text); cursor: pointer; transition: border-color .3s cubic-bezier(0.32,0.72,0,1), box-shadow .3s cubic-bezier(0.32,0.72,0,1), transform .2s ease; }
+.fc-bridge-plan:active { transform: scale(0.98); }
+.fc-bridge-plan.on { border-color: var(--fc-gold-bright, #C9A35C); box-shadow: 0 0 0 1px var(--fc-gold-bright, #C9A35C) inset, 0 8px 24px rgba(201,163,92,0.14); }
+.fc-bridge-plan-name { font-size: 12px; font-weight: 600; opacity: 0.7; }
+.fc-bridge-price { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; } .fc-bridge-price small { font-size: 11px; font-weight: 500; opacity: 0.65; }
+.fc-bridge-was { font-size: 11.5px; opacity: 0.5; text-decoration: line-through; }
+.fc-bridge-eq { font-size: 11px; opacity: 0.65; }
+.fc-bridge-badge { position: absolute; top: -10px; right: 10px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; color: #1A1410; background: linear-gradient(180deg, #F1E4C8, #C9A35C); box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+.fc-bridge-save { margin-top: 10px; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 12px; background: rgba(201,163,92,0.12); border: 1px solid rgba(201,163,92,0.28); }
+.fc-bridge-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: var(--fc-surface2, rgba(255,255,255,0.04)); border: 1px solid var(--fc-border); }
+.fc-bridge-boxhead { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+.fc-bridge-cta { position: sticky; bottom: -1px; margin-top: 14px; padding: 14px 0 2px; background: linear-gradient(to bottom, transparent, var(--fc-surface) 32%); }
 /* Import statements */
 .fc-imp-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--fc-border); border-radius: 14px; }
 .fc-imp-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--fc-border); font-size: 13px; cursor: pointer; }
