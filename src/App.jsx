@@ -2011,8 +2011,35 @@ function AccountTypePicker({ t, value, onChange }) {
 // Receipts only need to be legible to OCR: 1280px / q0.72 keeps a phone photo around 150-250 KB, which uploads and reads much faster than the old 0.85 JPEG.
 const IMG_MAX_DIM = 1280, IMG_QUALITY = 0.72;
 // Scan Receipt reads small print and several receipts per photo, so it gets a larger image than the 1280px default (fewer photos -> bigger each).
-const SCAN_MAX_PHOTOS = 10, SCAN_QUALITY = 0.8;
-const scanDimFor = (n) => (n <= 1 ? 2048 : n <= 3 ? 1800 : n <= 5 ? 1600 : 1400);
+// Smaller uploads read just as well (notification screenshots have big text) and leave sooner on a mobile uplink: ~120-250 KB instead of ~700 KB.
+const SCAN_MAX_PHOTOS = 10, SCAN_QUALITY = 0.72;
+const scanDimFor = (n) => (n <= 1 ? 1600 : n <= 3 ? 1500 : n <= 5 ? 1400 : 1280);
+// Which bank / e-wallet a scanned notification or receipt belongs to -> the user's matching account. Same key list as the scan function.
+const SCAN_BANK_KEYS = [
+  ['blu', /\bblu\b/i], ['bca', /\b(bca|m-?bca|klikbca|mybca)\b/i], ['mandiri', /\b(mandiri|livin'?)\b/i], ['bri', /\b(bri|brimo)\b/i],
+  ['bni', /\b(bni|wondr)\b/i], ['permata', /\bpermata\w*/i], ['cimb', /\b(cimb|octo)\b/i], ['danamon', /\bdanamon\b/i], ['btn', /\bbtn\b/i],
+  ['ocbc', /\bocbc\b/i], ['maybank', /\bmaybank\b/i], ['bsi', /\bbsi\b/i], ['jago', /\bjago\b/i], ['seabank', /\bsea\s?bank\b/i],
+  ['jenius', /\bjenius\b/i], ['gopay', /\bgo-?\s?pay\b|\bgojek\b/i], ['ovo', /\bovo\b/i], ['dana', /\bdana\b/i],
+  ['shopeepay', /\bshopee\s?pay\b|\bspay\b/i], ['linkaja', /\blink\s?aja\b/i], ['paypal', /\bpaypal\b/i], ['wise', /\bwise\b/i],
+];
+function scanBankKey(s) {
+  const t = typeof s === 'string' ? s : '';
+  if (!t) return null;
+  for (const [k, re] of SCAN_BANK_KEYS) if (re.test(t)) return k;
+  return null;
+}
+// Returns the id of the user's account that matches the scanned source, or '' when none does (never guesses between unrelated banks).
+function matchAccountBySource(item, accounts) {
+  const list = Array.isArray(accounts) ? accounts : [];
+  if (!item || !list.length) return '';
+  const key = item.sourceKey || scanBankKey(item.source);
+  if (key) { const hit = list.find((a) => scanBankKey(a.name) === key); return hit ? hit.id : ''; }
+  const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const src = norm(item.source);
+  if (src.length < 3) return '';
+  const hit = list.find((a) => { const n = norm(a.name); return n.length >= 3 && (n.includes(src) || src.includes(n)); });
+  return hit ? hit.id : '';
+}
 function canvasToImage(drawable, srcW, srcH, maxDim = IMG_MAX_DIM, quality = IMG_QUALITY) {
   let width = srcW, height = srcH;
   if (width > maxDim || height > maxDim) {
@@ -6229,7 +6256,7 @@ function Debts({ t, lang, debts, recurringItems, totalDebtRemaining, onAdd, onDe
     <div className="fc-card">
       <div className="fc-card-header">
         <div className="fc-card-title">{t.tabs.debts} — {fmtSumIDR(debts.map(d => d.remaining))}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="fc-addrow" data-testid="debt-addrow">
           <button className="fc-btn-primary" onClick={() => onAdd('debt')}><Plus size={15} /> {t.addDebt}</button>
           <button className="fc-btn-primary" onClick={() => onAdd('installment')}><Plus size={15} /> {t.addInstallment}</button>
         </div>
@@ -8006,8 +8033,8 @@ function ZeroBasedCard({ lang, income, budgets, investBudgets, debts, savingsTar
    Each account may carry card_style: { mode: 'solid'|'gradient'|'template'|'image', color, color2, angle, template, image, hideIcon, hideName, hideType }.
    No style = the default Revinance sand/obsidian glass. Templates are original Revinance patterns (no bank or brand artwork). */
 const WALLET_STR = {
-  id: { total: 'Total saldo', nAcc: (n) => `${n} akun`, detail: 'Detail', color: 'Warna kartu', edit: 'Ubah', del: 'Hapus', title: 'Warna kartu', solid: 'Polos', grad: 'Gradien', tpl: 'Template', dir: 'Arah gradien', ready: 'Gradien siap pakai', palette: 'Palet warna', hex: 'Warna bebas (hex)', c1: 'Warna 1', c2: 'Warna 2', show: 'Tampilan kartu', hideIcon: 'Sembunyikan ikon', hideName: 'Sembunyikan nama', hideType: 'Sembunyikan tipe', pIcon: 'Ikon', pName: 'Nama', pType: 'Tipe', up: 'Naikkan', down: 'Turunkan', hideBal: 'Sembunyikan saldo', showBal: 'Tampilkan saldo', save: 'Simpan', reset: 'Reset ke default', upload: 'Unggah gambar', uploadNote: 'Gambar diperkecil otomatis dan disimpan di akunmu.', uploadFail: 'Gambar tidak bisa dibaca. Coba file lain.', tplNote: 'Template bergaya Revinance. Atau pakai gambarmu sendiri.', saved: 'Warna kartu disimpan.', failed: 'Warna kartu gagal disimpan. Coba lagi.' },
-  en: { total: 'Total balance', nAcc: (n) => `${n} account${n === 1 ? '' : 's'}`, detail: 'Details', color: 'Card color', edit: 'Edit', del: 'Delete', title: 'Card color', solid: 'Solid', grad: 'Gradient', tpl: 'Template', dir: 'Gradient direction', ready: 'Ready-made gradients', palette: 'Color palette', hex: 'Custom color (hex)', c1: 'Color 1', c2: 'Color 2', show: 'Card display', hideIcon: 'Hide icon', hideName: 'Hide name', hideType: 'Hide type', pIcon: 'Icon', pName: 'Name', pType: 'Type', up: 'Move up', down: 'Move down', hideBal: 'Hide balance', showBal: 'Show balance', save: 'Save', reset: 'Reset to default', upload: 'Upload image', uploadNote: 'The image is shrunk automatically and saved to your account.', uploadFail: 'Could not read that image. Try another file.', tplNote: 'Revinance-style templates. Or use your own image.', saved: 'Card color saved.', failed: 'Could not save the card color. Please try again.' },
+  id: { total: 'Total saldo', nAcc: (n) => `${n} akun`, detail: 'Detail', color: 'Warna kartu', edit: 'Ubah', del: 'Hapus', title: 'Warna kartu', solid: 'Polos', grad: 'Gradien', tpl: 'Template', dir: 'Arah gradien', ready: 'Gradien siap pakai', palette: 'Palet warna', hex: 'Warna bebas (hex)', c1: 'Warna 1', c2: 'Warna 2', show: 'Tampilan kartu', hideIcon: 'Sembunyikan ikon', hideName: 'Sembunyikan nama', hideType: 'Sembunyikan tipe', wallet: 'Dompet', pIcon: 'Ikon', pName: 'Nama', pType: 'Tipe', up: 'Naikkan', down: 'Turunkan', hideBal: 'Sembunyikan saldo', showBal: 'Tampilkan saldo', save: 'Simpan', reset: 'Reset ke default', upload: 'Unggah gambar', uploadNote: 'Gambar diperkecil otomatis dan disimpan di akunmu.', uploadFail: 'Gambar tidak bisa dibaca. Coba file lain.', tplNote: 'Template bergaya Revinance. Atau pakai gambarmu sendiri.', saved: 'Warna kartu disimpan.', failed: 'Warna kartu gagal disimpan. Coba lagi.' },
+  en: { total: 'Total balance', nAcc: (n) => `${n} account${n === 1 ? '' : 's'}`, detail: 'Details', color: 'Card color', edit: 'Edit', del: 'Delete', title: 'Card color', solid: 'Solid', grad: 'Gradient', tpl: 'Template', dir: 'Gradient direction', ready: 'Ready-made gradients', palette: 'Color palette', hex: 'Custom color (hex)', c1: 'Color 1', c2: 'Color 2', show: 'Card display', hideIcon: 'Hide icon', hideName: 'Hide name', hideType: 'Hide type', wallet: 'Wallet', pIcon: 'Icon', pName: 'Name', pType: 'Type', up: 'Move up', down: 'Move down', hideBal: 'Hide balance', showBal: 'Show balance', save: 'Save', reset: 'Reset to default', upload: 'Upload image', uploadNote: 'The image is shrunk automatically and saved to your account.', uploadFail: 'Could not read that image. Try another file.', tplNote: 'Revinance-style templates. Or use your own image.', saved: 'Card color saved.', failed: 'Could not save the card color. Please try again.' },
 };
 const WALLET_TEMPLATES = [
   { id: 'sand', n: ['Sand Glass', 'Sand Glass'], ink: 'dark', css: 'radial-gradient(120% 85% at 0% 0%, rgba(255,255,255,0.5), transparent 65%), linear-gradient(145deg,#E6D9C3 0%,#CDBDA3 48%,#A7957C 100%)' },
@@ -8181,7 +8208,7 @@ function CardStyleSheet({ a, t, lang, onClose, onSave }) {
   );
 }
 function Review({ section = 'overview', t, lang, transactions, monthTx, totals, health, selectedMonth, debts, budgets, investPlan, investBudgets, totalDebtRemaining, monthLabel, accounts, onAddAccount, onEditAccount, onDeleteAccount, onViewAccountDetail, onTransfer, onStyleAccount, onMoveAccount, onEditInvestPlan, onDeleteInvestCat, onEditInvestCat, onAddInvestContribution, savingGoals, goalDeposits, onAddGoal, onEditGoal, onDeleteGoal, onContributeGoal, onWithdrawGoal, onWithdrawInvest, weekStart, savingsTarget, onOpenSavingsTarget, emergencyGoal, avgMonthlyExpenseIdr, onOpenEmergency, allocPlan, onAllocChange }) {
-  const [focusId, setFocusId] = useState(null); const [styleAcc, setStyleAcc] = useState(null);
+  const [focusId, setFocusId] = useState(''); const [styleAcc, setStyleAcc] = useState(null);
   const investPct = investPlan > 0 ? Math.min(100, (totals.invested / investPlan) * 100) : 0;
   const netWorth = (accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
 
@@ -8229,7 +8256,7 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
 
   const W = WALLET_STR[lang] || WALLET_STR.en;
   const accList = accounts || [];
-  const focusAcc = accList.find(a => a.id === focusId) || accList[0];
+  const focusAcc = focusId === '' ? null : (accList.find(a => a.id === focusId) || accList[0]); // '' = every card folded back into the stack
   const [hideBal, setHideBal] = useState(() => { try { return localStorage.getItem('rv_hide_balance') === '1'; } catch (e) { return false; } });
   const toggleHideBal = () => setHideBal(v => { const n = !v; try { localStorage.setItem('rv_hide_balance', n ? '1' : '0'); } catch (e) { /* ignore */ } return n; });
   const stackRef = useRef(null); const snapRef = useRef(null);
@@ -8246,20 +8273,24 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
   }, [orderSig]);
   const moveCard = (id, dir) => { if (!onMoveAccount) return; snapRef.current = measureSlots(); onMoveAccount(id, dir); };
   const accountsCard = (
-      <div className="fc-card fc-wallet">
+    <>
+      <div className="fc-card fc-wtotal-card">
         <div className="fc-wtotal" data-testid="wallet-total">
           <div className="fc-wtotal-top">
             <span className="fc-wtotal-label">{W.total}</span>
             <button type="button" className="fc-weye" data-testid="wallet-eye" aria-pressed={hideBal} aria-label={hideBal ? W.showBal : W.hideBal} title={hideBal ? W.showBal : W.hideBal} onClick={toggleHideBal}>{hideBal ? <EyeOff size={16} /> : <Eye size={16} />}</button>
           </div>
           <span className="fc-wtotal-val" data-testid="wallet-total-val">{hideBal ? 'Rp ••••••••' : fmtIDR(netWorth)}</span>
-          <div className="fc-wtotal-foot">
-            <span className="fc-wtotal-sub">{t.accounts} · {W.nAcc(accList.length)}</span>
-            <div className="fc-wtotal-actions">
+          <span className="fc-wtotal-sub">{t.accounts} · {W.nAcc(accList.length)}</span>
+        </div>
+      </div>
+      <div className="fc-card fc-wallet">
+        <div className="fc-wallet-head">
+          <span className="fc-wallet-title" data-testid="wallet-title">{W.wallet}</span>
+          <div className="fc-wtotal-actions">
               {accList.length >= 2 && onTransfer && <button type="button" className="fc-wround" data-testid="open-transfer" aria-label={t.trButton} title={t.trButton} onClick={onTransfer}><ArrowLeftRight size={17} /></button>}
               <button type="button" className="fc-wround" data-testid="add-account-btn" aria-label={t.addAccount} title={t.addAccount} onClick={onAddAccount}><Plus size={18} /></button>
             </div>
-          </div>
         </div>
         {accList.length === 0 ? <div className="fc-empty">{t.noAccounts}</div> : (
           <div className="fc-wstack" data-testid="wallet-stack" ref={stackRef}>
@@ -8267,7 +8298,7 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
               const on = !!focusAcc && focusAcc.id === a.id; const ti = on ? 0 : -1;
               return (
                 <div className="fc-wslot" key={a.id} data-wid={a.id}>
-                  <WalletCard a={a} t={t} lang={lang} focus={on} hidden={hideBal} onFocus={() => setFocusId(a.id)} />
+                  <WalletCard a={a} t={t} lang={lang} focus={on} hidden={hideBal} onFocus={() => setFocusId(on ? '' : a.id)} />
                   <div className="fc-wbar" data-open={on ? '1' : '0'} aria-hidden={!on}>
                     <div className="fc-wbar-in">
                       <button type="button" className="fc-wbtn" data-testid="acc-detail" tabIndex={ti} aria-label={t.seeDetails || W.detail} title={t.seeDetails || W.detail} onClick={() => onViewAccountDetail(a)}><Receipt size={17} /></button>
@@ -8286,6 +8317,7 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
         )}
         {styleAcc && <CardStyleSheet a={accList.find(x => x.id === styleAcc.id) || styleAcc} t={t} lang={lang} onClose={() => setStyleAcc(null)} onSave={async (st) => { const ok = onStyleAccount ? await onStyleAccount(styleAcc.id, st) : false; if (ok) setStyleAcc(null); return ok; }} />}
       </div>
+    </>
   );
   if (section === 'accounts') return <div className="fc-review">{accountsCard}</div>;
 
@@ -10543,9 +10575,10 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
               return (<>
                 <div className="fc-settings-row" style={{ cursor: 'default' }}>
                   <span>{TS.title}</span>
-                  <div className="fc-segmented fc-segmented-sm fc-mode-icons" style={{ marginBottom: 0 }} role="tablist" aria-label={TS.title}>
-                    <button type="button" role="tab" aria-selected={!on} aria-label={TS.daily} title={TS.daily} data-testid="mode-daily" className={`fc-segmented-btn ${!on ? 'fc-segmented-active' : ''}`} onClick={() => onHomeMode('daily')}><Wallet size={16} /></button>
-                    <button type="button" role="tab" aria-selected={on} aria-label={TS.travel} title={TS.travel} data-testid="mode-travel" className={`fc-segmented-btn ${on ? 'fc-segmented-active' : ''}`} onClick={() => { if (!isPro) { setTravelLock(true); return; } onHomeMode('travel'); }}><Plane size={16} />{!isPro && <Lock size={10} className="fc-lock-ico fc-mode-lock" aria-label="Pro" />}</button>
+                  <div className="fc-lang-toggle fc-mode-toggle" role="tablist" aria-label={TS.title}>
+                    <button type="button" role="tab" aria-selected={!on} aria-label={TS.daily} title={TS.daily} data-testid="mode-daily" className={!on ? 'fc-lang-active' : ''} onClick={() => onHomeMode('daily')}><Wallet size={18} /></button>
+                    <span className="fc-lang-sep" aria-hidden="true">/</span>
+                    <button type="button" role="tab" aria-selected={on} aria-label={TS.travel} title={TS.travel} data-testid="mode-travel" className={on ? 'fc-lang-active' : ''} onClick={() => { if (!isPro) { setTravelLock(true); return; } onHomeMode('travel'); }}><Plane size={18} />{!isPro && <Lock size={10} className="fc-lock-ico fc-mode-lock" aria-label="Pro" />}</button>
                   </div>
                 </div>
                 {on && isPro && (
@@ -12162,8 +12195,10 @@ function QuickAddModal({ t, lang, userId, accounts, debts, existingTx, onClose, 
         currency: isCcy(it.currency) ? it.currency : APP_CCY, // ORIGINAL currency on the screenshot/text; TxModal opens in it
         date: it.date || todayISO(),
         dateUnread: imgs.length > 0 && it.dateRead === false, // photo scanned but no date could be read: today is only a placeholder
-        note: it.note || '',
+        // No merchant on the screenshot (e.g. a bank notification that only names a category): the title is the category itself.
+        note: it.note || (it.type === 'income' ? '' : (t.categories[it.category && EXPENSE_CATS.includes(it.category) ? it.category : 'other_expense'] || '')),
         debtId: null,
+        accountId: matchAccountBySource(it, accounts), // BCA notification -> the BCA account, Permata receipt -> the Permata account
         receiptPath: pathOf(it),
       });
       if (items.length <= 1) { onParsed(toPrefill(items[0])); return; }
@@ -12176,7 +12211,7 @@ function QuickAddModal({ t, lang, userId, accounts, debts, existingTx, onClose, 
           amount: hasAmount ? roundCcy(Number(it.amount), pf.currency) : '',
           category: pf.type === 'income' ? null : pf.category,
           incomeCategory: pf.type === 'income' ? pf.category : null,
-          accountId: '', date: pf.date, dateUnread: pf.dateUnread, note: '', payVia: 'account', cardName: '', cardDue: '', selected: hasAmount, receiptPath: pf.receiptPath, fromReceipt: imgs.length > 0,
+          accountId: pf.accountId || '', date: pf.date, dateUnread: pf.dateUnread, note: '', payVia: 'account', cardName: '', cardDue: '', selected: hasAmount, receiptPath: pf.receiptPath, fromReceipt: imgs.length > 0,
         };
       });
       const used = new Set(drafts.map((d) => d.receiptPath).filter(Boolean));
@@ -14784,14 +14819,17 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-rt-p { margin-bottom: 12px; }
 /* Wallet: total card + stacked account cards */
 .fc-wallet { padding-bottom: 18px; --wease: cubic-bezier(0.32, 0.72, 0, 1); }
-.fc-wtotal { display: flex; flex-direction: column; gap: 4px; padding: 20px 20px 16px; border-radius: 24px; background: var(--fc-surface-2, rgba(255,255,255,0.04)); border: 1px solid var(--fc-border); margin-bottom: 18px; }
-.fc-wtotal-top { display: flex; align-items: center; gap: 6px; }
+.fc-wtotal-card { padding: 18px 16px 20px; }
+.fc-wtotal { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.fc-wallet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -4px 0 14px; }
+.fc-wallet-title { font-size: 15px; font-weight: 500; color: var(--fc-text-dim); padding-left: 4px; }
+.fc-wtotal-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .fc-wtotal-label { font-size: 12.5px; opacity: 0.65; }
-.fc-weye { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fc-text); opacity: 0.7; cursor: pointer; transition: opacity .2s ease, transform .2s var(--wease); }
+.fc-weye { width: 24px; height: 24px; margin: -4px 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--fc-text); opacity: 0.7; cursor: pointer; transition: opacity .2s ease, transform .2s var(--wease); }
 .fc-weye:active { transform: scale(0.9); opacity: 1; }
 .fc-wtotal-val { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-wtotal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
-.fc-wtotal-sub { font-size: 12px; opacity: 0.55; min-width: 0; }
+.fc-wtotal-sub { font-size: 12px; opacity: 0.55; min-width: 0; margin-top: 8px; }
 .fc-wtotal-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .fc-wround { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--fc-surface); border: 1px solid var(--fc-border); color: var(--fc-text); cursor: pointer; transition: transform .2s var(--wease); }
 .fc-wround:active { transform: scale(0.94); }
@@ -14886,6 +14924,14 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-bridge-legal { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 12px; }
 .fc-bridge-legal a, .fc-bridge-legal button { color: rgba(244,238,226,0.6); text-decoration: none; background: none; border: 0; padding: 4px 0; font: inherit; cursor: pointer; }
 .fc-bridge-legal i { width: 1px; height: 12px; background: rgba(255,255,255,0.18); }
+.fc-addrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1 1 100%; width: 100%; }
+.fc-addrow .fc-btn-primary { width: 100%; justify-content: center; white-space: nowrap; }
+/* Settings usage mode: same capsule as the Biometric On / Off toggle */
+.fc-mode-toggle { padding: 4px 6px; gap: 2px; }
+.fc-mode-toggle button { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 30px; padding: 0; background: none; border: 0; border-radius: 16px; color: var(--fc-text-dim); cursor: pointer; transition: color .3s cubic-bezier(0.32,0.72,0,1), transform .2s ease; }
+.fc-mode-toggle button:active { transform: scale(0.92); }
+.fc-mode-toggle button.fc-lang-active { color: var(--fc-gold-bright); }
+.fc-mode-toggle .fc-mode-lock { position: absolute; top: 2px; right: 6px; opacity: .7; }
 /* Import statements */
 .fc-imp-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--fc-border); border-radius: 14px; }
 .fc-imp-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--fc-border); font-size: 13px; cursor: pointer; }
