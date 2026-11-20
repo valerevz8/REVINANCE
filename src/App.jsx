@@ -829,8 +829,8 @@ function billingRegion() {
 const PRO_NUM = { idr: { m: 39000, y: 399000 }, usd: { m: 7.99, y: 79.99 } };
 const proSaving = () => { const k = billingRegion() === 'ID' ? 'idr' : 'usd'; const n = PRO_NUM[k]; const full = n.m * 12; const save = full - n.y; const fmt = (v) => k === 'idr' ? 'Rp' + Math.round(v).toLocaleString('id-ID') : '$' + v.toFixed(2); return { pct: Math.round(save / full * 100), save: fmt(save), full: fmt(full) }; };
 const BRIDGE_STR = {
-  id: { title: 'Revinance Pro', head: 'Atur uang dengan tenang, mulai dari sini.', pick: 'Pilih paket', monthly: 'Bulanan', yearly: 'Tahunan', best: 'Paling hemat', perMonth: '/ bulan', perYear: '/ tahun', savePct: (p) => `Hemat ${p}%`, saveLine: (a, b) => `Pilih Tahunan dan hemat ${a} dibanding 12 kali bayar bulanan (${b}).`, monthlyLine: (a) => `Tahunan lebih hemat ${a}. Geser ke Tahunan?`, what: 'Yang kamu dapat dengan Pro', cta: 'Lanjut ke Pembayaran', later: 'Nanti saja' },
-  en: { title: 'Revinance Pro', head: 'Manage money calmly, starting here.', pick: 'Choose a plan', monthly: 'Monthly', yearly: 'Yearly', best: 'Best value', perMonth: '/ month', perYear: '/ year', savePct: (p) => `Save ${p}%`, saveLine: (a, b) => `Go Yearly and save ${a} versus 12 monthly payments (${b}).`, monthlyLine: (a) => `Yearly saves ${a}. Switch to Yearly?`, what: 'What you get with Pro', cta: 'Continue to Payment', later: 'Maybe later' },
+  id: { title: 'Revinance Pro', head: 'Atur uang jadi lebih mudah,\ndimulai di sini.', pick: 'Pilih paket', monthly: 'Bulanan', yearly: 'Tahunan', best: 'Paling hemat', perMonth: '/ bulan', perYear: '/ tahun', savePct: (p) => `Hemat ${p}%`, saveLine: (a, b) => `Pilih Tahunan dan hemat ${a} dibanding 12 kali bayar bulanan (${b}).`, monthlyLine: (a) => `Tahunan lebih hemat ${a}. Geser ke Tahunan?`, what: 'Yang kamu dapat dengan Pro', cta: 'Upgrade Sekarang', privacy: 'Kebijakan Privasi', terms: 'Ketentuan Penggunaan', help: 'Bantuan' },
+  en: { title: 'Revinance Pro', head: 'Managing money gets easier,\nstarting here.', pick: 'Choose a plan', monthly: 'Monthly', yearly: 'Yearly', best: 'Best value', perMonth: '/ month', perYear: '/ year', savePct: (p) => `Save ${p}%`, saveLine: (a, b) => `Go Yearly and save ${a} versus 12 monthly payments (${b}).`, monthlyLine: (a) => `Yearly saves ${a}. Switch to Yearly?`, what: 'What you get with Pro', cta: 'Upgrade Now', privacy: 'Privacy Policy', terms: 'Terms of Use', help: 'Help' },
 };
 const proPrices = () => PRO_PRICES[billingRegion() === 'ID' ? 'idr' : 'usd'];
 const ACC_STR = {
@@ -9980,6 +9980,49 @@ function AccountSheet({ initialPage, initialPeriod, initialOrder, lang, isPro, n
   const Nav = ({ title, sub, onClick, testid }) => <button type="button" className="fc-acc-nav" onClick={onClick} data-testid={testid}><span><b>{title}</b>{sub && <small>{sub}</small>}</span><ChevronRight size={16} /></button>;
   const BR = BRIDGE_STR[lang] || BRIDGE_STR.en; const SV = proSaving();
   const headTitle = page === 'pro' ? BR.title : page === 'plans' ? A.plans : page === 'billing' ? A.billing : page === 'checkout' ? C.title : page === 'result' ? C.title : A.title;
+  if (page === 'pro') return (
+    <div className="fc-bridge-screen" data-testid="account-modal" onClick={(e) => e.stopPropagation()}>
+      <img className="fc-bridge-bg" src="/pro-hero.jpg" alt="Revinance Pro" width="1080" height="1080" />
+      <div className="fc-bridge-nav">
+        <button type="button" className="fc-bridge-round" onClick={() => setPage('main')} aria-label="Back" data-testid="account-back"><ChevronLeft size={18} /></button>
+        <button type="button" className="fc-bridge-round" onClick={onClose} aria-label="Close" data-testid="bridge-close"><X size={18} /></button>
+      </div>
+      <div className="fc-bridge-scroll">
+        <div className="fc-bridge" data-testid="pro-bridge">
+          <div className="fc-bridge-head">{BR.head.split('\n').map((l, i) => <span key={i} style={{ display: 'block' }}>{l}</span>)}</div>
+          <div className="fc-bridge-panel">
+            <div className="fc-bridge-label">{BR.pick}</div>
+            <div className="fc-bridge-plans" role="radiogroup">
+              <button type="button" role="radio" aria-checked={chkPlan === 'monthly'} className={`fc-bridge-plan ${chkPlan === 'monthly' ? 'on' : ''}`} onClick={() => setChkPlan('monthly')} data-testid="bridge-monthly">
+                <span className="fc-bridge-plan-name">{BR.monthly}</span>
+                <span className="fc-bridge-price">{P.m}<small> {BR.perMonth}</small></span>
+              </button>
+              <button type="button" role="radio" aria-checked={chkPlan === 'yearly'} className={`fc-bridge-plan ${chkPlan === 'yearly' ? 'on' : ''}`} onClick={() => setChkPlan('yearly')} data-testid="bridge-yearly">
+                <span className="fc-bridge-badge">{BR.savePct(SV.pct)}</span>
+                <span className="fc-bridge-plan-name">{BR.yearly}</span>
+                <span className="fc-bridge-price">{P.y}<small> {BR.perYear}</small></span>
+                <span className="fc-bridge-was">{SV.full}</span>
+                <span className="fc-bridge-eq">{A.yearNote(P.ym)}</span>
+              </button>
+            </div>
+            <div className="fc-bridge-save" data-testid="bridge-save">{chkPlan === 'yearly' ? BR.saveLine(SV.save, SV.full) : BR.monthlyLine(SV.save)}</div>
+          </div>
+          <div className="fc-bridge-panel">
+            <div className="fc-bridge-label">{BR.what}</div>
+            <List items={A.proList} />
+          </div>
+        </div>
+        <div className="fc-bridge-cta">
+          <button type="button" className="fc-bridge-btn" data-testid="bridge-cta" onClick={() => setPage('checkout')}>{BR.cta}</button>
+          <div className="fc-bridge-legal" data-testid="bridge-legal">
+            <a href="/?page=privacy" target="_blank" rel="noopener noreferrer" data-testid="bridge-privacy">{BR.privacy}</a><i aria-hidden="true" />
+            <a href="/?page=terms" target="_blank" rel="noopener noreferrer" data-testid="bridge-terms">{BR.terms}</a><i aria-hidden="true" />
+            <button type="button" onClick={() => openBilling(email)} data-testid="bridge-help">{BR.help}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <div className="fc-modal-backdrop" onClick={onClose}>
       <div className="fc-modal fc-modal-account" data-testid="account-modal" onClick={(e) => e.stopPropagation()}>
@@ -10037,32 +10080,6 @@ function AccountSheet({ initialPage, initialPeriod, initialOrder, lang, isPro, n
           </div>
           <div className="fc-field-note">{A.plansNote}</div>
         </>)}
-
-        {page === 'pro' && (
-          <div className="fc-bridge" data-testid="pro-bridge">
-            <div className="fc-bridge-hero"><img src="/pro-hero.jpg" alt="Revinance Pro" width="900" height="750" /><div className="fc-bridge-fade" /></div>
-            <div className="fc-bridge-head">{BR.head}</div>
-            <div className="fc-acc-title" style={{ marginTop: 14 }}>{BR.pick}</div>
-            <div className="fc-bridge-plans" role="radiogroup">
-              <button type="button" role="radio" aria-checked={chkPlan === 'monthly'} className={`fc-bridge-plan ${chkPlan === 'monthly' ? 'on' : ''}`} onClick={() => setChkPlan('monthly')} data-testid="bridge-monthly">
-                <span className="fc-bridge-plan-name">{BR.monthly}</span>
-                <span className="fc-bridge-price">{P.m}<small> {BR.perMonth}</small></span>
-              </button>
-              <button type="button" role="radio" aria-checked={chkPlan === 'yearly'} className={`fc-bridge-plan ${chkPlan === 'yearly' ? 'on' : ''}`} onClick={() => setChkPlan('yearly')} data-testid="bridge-yearly">
-                <span className="fc-bridge-badge">{BR.savePct(SV.pct)}</span>
-                <span className="fc-bridge-plan-name">{BR.yearly}</span>
-                <span className="fc-bridge-price">{P.y}<small> {BR.perYear}</small></span>
-                <span className="fc-bridge-was">{SV.full}</span>
-                <span className="fc-bridge-eq">{A.yearNote(P.ym)}</span>
-              </button>
-            </div>
-            <div className="fc-bridge-save" data-testid="bridge-save">{chkPlan === 'yearly' ? BR.saveLine(SV.save, SV.full) : BR.monthlyLine(SV.save)}</div>
-            <div className="fc-bridge-box"><div className="fc-bridge-boxhead">{BR.what}</div><List items={A.proList} /></div>
-            <div className="fc-bridge-cta">
-              <button type="button" className="fc-btn-primary" style={{ width: '100%', justifyContent: 'center' }} data-testid="bridge-cta" onClick={() => setPage('checkout')}>{BR.cta}</button>
-            </div>
-          </div>
-        )}
 
         {page === 'checkout' && (<>
           <div className="fc-acc-title" style={{ marginTop: 6 }}>{C.pickPlan}</div>
@@ -14780,13 +14797,13 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-wround:active { transform: scale(0.94); }
 .fc-wstack { position: relative; display: flex; flex-direction: column; padding: 0 2px; }
 .fc-wslot { position: relative; will-change: transform; }
-.fc-wcard { position: relative; overflow: hidden; border-radius: 22px; padding: 14px 18px; height: 78px; margin-bottom: -16px; color: #000; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; box-sizing: border-box;
+.fc-wcard { position: relative; overflow: hidden; border-radius: 22px; padding: 14px 18px; aspect-ratio: 1.586 / 1; margin-bottom: calc(-63.05% + 62px); color: #000; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; box-sizing: border-box;
   background: linear-gradient(145deg, #E6D9C3 0%, #CDBDA3 48%, #A7957C 100%); border: 1px solid rgba(255,255,255,0.38);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -5px 16px rgba(0,0,0,0.26);
-  transition: height .6s var(--wease), margin-bottom .6s var(--wease), box-shadow .6s var(--wease), transform .6s var(--wease); -webkit-tap-highlight-color: transparent; }
+  transition: margin-bottom .6s var(--wease), box-shadow .6s var(--wease), transform .6s var(--wease); -webkit-tap-highlight-color: transparent; }
 .fc-wslot:last-child .fc-wcard { margin-bottom: 0; }
 .fc-wcard:active { transform: scale(0.985); }
-.fc-wcard-on { height: 142px; margin-bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 12px 28px rgba(0,0,0,0.38); }
+.fc-wcard-on { margin-bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 12px 28px rgba(0,0,0,0.38); }
 .fc-app[data-theme="light"] .fc-wcard:not(.fc-wcard-custom) { color: #D9CDB8; background: linear-gradient(145deg, #3B3631 0%, #17140F 50%, #000 100%); border: 1px solid rgba(217,205,184,0.22); }
 .fc-wcard-custom { border: 1px solid rgba(255,255,255,0.22); }
 .fc-wink-light { color: #F4EEE2; }
@@ -14795,8 +14812,7 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-wcard-id { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .fc-wcard-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fc-wcard-bal { font-size: 16px; font-weight: 700; white-space: nowrap; }
-.fc-wcard-body { display: flex; flex-direction: column; gap: 2px; margin-top: auto; opacity: 0; transform: translateY(8px); transition: opacity .25s ease, transform .6s var(--wease); }
-.fc-wcard-on .fc-wcard-body { opacity: 1; transform: none; transition: opacity .45s ease .12s, transform .6s var(--wease) .05s; }
+.fc-wcard-body { display: flex; flex-direction: column; gap: 2px; margin-top: auto; }
 .fc-wcard-type { font-size: 12px; opacity: 0.75; }
 .fc-wcard-sub { font-size: 11px; opacity: 0.65; }
 .fc-wbar { height: 0; opacity: 0; overflow: hidden; transform: translateY(-6px); transition: height .6s var(--wease), opacity .2s ease, transform .6s var(--wease); }
@@ -14806,11 +14822,11 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-wbtn:active { transform: scale(0.92); }
 .fc-wbtn:disabled { opacity: 0.3; cursor: default; }
 .fc-wbar-sep { width: 1px; height: 20px; background: var(--fc-border); margin: 0 2px; }
-@media (prefers-reduced-motion: reduce) { .fc-wcard, .fc-wbar, .fc-wcard-body { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .fc-wcard, .fc-wbar { transition: none !important; } }
 .fc-wsheet { max-width: 440px; max-height: 92vh; overflow-y: auto; padding-top: 0; }
 .fc-wsheet-top { position: sticky; top: 0; z-index: 5; background: var(--fc-surface); padding: 14px 0 12px; border-bottom: 1px solid var(--fc-border); margin-bottom: 8px; }
-.fc-wsheet-prev { padding: 0 2px; }
-.fc-wsheet-prev .fc-wcard { height: 112px; margin-bottom: 0; cursor: default; }
+.fc-wsheet-prev { padding: 0 2px; max-width: 280px; margin: 0 auto; }
+.fc-wsheet-prev .fc-wcard { margin-bottom: 0; cursor: default; }
 .fc-wsheet-prev .fc-wcard:active { transform: none; }
 .fc-wpills { display: flex; gap: 8px; }
 .fc-wpill { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border-radius: 999px; border: 1px solid var(--fc-border); background: var(--fc-surface-2, rgba(255,255,255,0.04)); color: var(--fc-text); opacity: 0.7; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .3s var(--wease), border-color .3s var(--wease), opacity .3s ease, transform .2s var(--wease); }
@@ -14841,24 +14857,35 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-trip-viewsw { transition: opacity .7s cubic-bezier(0.32, 0.72, 0, 1), transform .7s cubic-bezier(0.32, 0.72, 0, 1); }
 .fc-trip-viewsw-hide { opacity: 0; transform: translateY(10px) scale(0.96); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .fc-trip-viewsw { transition: none; } }
-/* Pro bridge page */
-.fc-bridge-hero { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 6 / 5; background: #0d0b08; }
-.fc-bridge-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.fc-bridge-fade { position: absolute; inset: auto 0 0 0; height: 38%; background: linear-gradient(to bottom, transparent, var(--fc-surface)); }
-.fc-bridge-head { font-size: 19px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.3; text-align: center; margin-top: 14px; padding: 0 6px; }
+/* Pro bridge page: fixed image background, content scrolls over it */
+.fc-bridge-screen { position: fixed; inset: 0; z-index: 1300; overflow: hidden; background: #000; color: #F4EEE2; --fc-text: #F4EEE2; --fc-text-dim: rgba(244,238,226,0.62); --fc-surface: #141210; --fc-surface2: #1B1815; --fc-border: rgba(255,255,255,0.11); animation: fcBridgeIn .5s cubic-bezier(0.32,0.72,0,1); }
+@keyframes fcBridgeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.fc-bridge-bg { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(100vw, 520px); height: min(100vw, 520px); object-fit: cover; display: block; z-index: 0; -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,0.55) 74%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 52%, rgba(0,0,0,0.55) 74%, transparent 100%); }
+.fc-bridge-nav { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 0; right: 0; z-index: 3; display: flex; justify-content: space-between; padding: 0 16px; max-width: 520px; margin: 0 auto; pointer-events: none; }
+.fc-bridge-round { pointer-events: auto; width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #F4EEE2; background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.18); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); cursor: pointer; }
+.fc-bridge-scroll { position: absolute; inset: 0; z-index: 2; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fc-bridge { max-width: 520px; margin: 0 auto; padding: min(80vw, 416px) 16px 8px; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-weight: 500; font-style: normal; font-display: swap; src: url(/pjs-500.woff2) format('woff2'); }
+.fc-bridge-head { font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif; font-size: 16.5px; font-weight: 500; letter-spacing: 0; line-height: 1.4; text-align: center; padding: 0 12px 18px; text-shadow: 0 1px 16px rgba(0,0,0,0.7), 0 0 2px rgba(0,0,0,0.4); }
+.fc-bridge-panel { margin-bottom: 12px; padding: 14px; border-radius: 22px; background: rgba(24,21,18,0.86); border: 1px solid var(--fc-border); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.fc-bridge-label { font-size: 12.5px; font-weight: 500; color: var(--fc-text-dim); margin: 0 4px 10px; }
 .fc-bridge-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.fc-bridge-plan { position: relative; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left; padding: 16px 14px 14px; border-radius: 16px; border: 1px solid var(--fc-border); background: var(--fc-surface2, var(--fc-surface)); color: var(--fc-text); cursor: pointer; transition: border-color .3s cubic-bezier(0.32,0.72,0,1), box-shadow .3s cubic-bezier(0.32,0.72,0,1), transform .2s ease; }
+.fc-bridge-plan { position: relative; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left; padding: 16px 14px 14px; border-radius: 16px; border: 1px solid var(--fc-border); background: #100E0C; color: var(--fc-text); cursor: pointer; transition: border-color .3s cubic-bezier(0.32,0.72,0,1), box-shadow .3s cubic-bezier(0.32,0.72,0,1), transform .2s ease; }
 .fc-bridge-plan:active { transform: scale(0.98); }
-.fc-bridge-plan.on { border-color: var(--fc-gold-bright, #C9A35C); box-shadow: 0 0 0 1px var(--fc-gold-bright, #C9A35C) inset, 0 8px 24px rgba(201,163,92,0.14); }
-.fc-bridge-plan-name { font-size: 12px; font-weight: 600; opacity: 0.7; }
-.fc-bridge-price { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; } .fc-bridge-price small { font-size: 11px; font-weight: 500; opacity: 0.65; }
+.fc-bridge-plan.on { border-color: #E9DCC0; box-shadow: 0 0 0 1px #E9DCC0 inset; }
+.fc-bridge-plan-name { font-size: 12px; font-weight: 500; opacity: 0.68; }
+.fc-bridge-price { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; } .fc-bridge-price small { font-size: 11px; font-weight: 500; opacity: 0.65; }
 .fc-bridge-was { font-size: 11.5px; opacity: 0.5; text-decoration: line-through; }
 .fc-bridge-eq { font-size: 11px; opacity: 0.65; }
-.fc-bridge-badge { position: absolute; top: -10px; right: 10px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; color: #1A1410; background: linear-gradient(180deg, #F1E4C8, #C9A35C); box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
-.fc-bridge-save { margin-top: 10px; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 12px; background: rgba(201,163,92,0.12); border: 1px solid rgba(201,163,92,0.28); }
-.fc-bridge-box { margin-top: 12px; padding: 14px; border-radius: 16px; background: var(--fc-surface2, rgba(255,255,255,0.04)); border: 1px solid var(--fc-border); }
-.fc-bridge-boxhead { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
-.fc-bridge-cta { position: sticky; bottom: -1px; margin-top: 14px; padding: 14px 0 2px; background: linear-gradient(to bottom, transparent, var(--fc-surface) 32%); }
+.fc-bridge-badge { position: absolute; top: -10px; right: 10px; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; color: #1A1410; background: linear-gradient(180deg, #F1E4C8, #C9A35C); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+.fc-bridge-save { margin-top: 12px; font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 12px; background: rgba(201,163,92,0.12); border: 1px solid rgba(201,163,92,0.28); }
+.fc-bridge-screen .fc-acc-list { margin: 0; }
+.fc-bridge-cta { position: sticky; bottom: 0; max-width: 520px; margin: 0 auto; padding: 22px 16px max(14px, env(safe-area-inset-bottom)); background: linear-gradient(to bottom, rgba(0,0,0,0), #000 38%); }
+.fc-bridge-btn { width: 100%; height: 52px; border-radius: 26px; border: 0; cursor: pointer; font-size: 16px; font-weight: 600; color: #17140F; background: #F4EEE2; box-shadow: 0 6px 24px rgba(0,0,0,0.5); transition: transform .2s ease; }
+.fc-bridge-btn:active { transform: scale(0.98); }
+.fc-bridge-legal { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 12px; }
+.fc-bridge-legal a, .fc-bridge-legal button { color: rgba(244,238,226,0.6); text-decoration: none; background: none; border: 0; padding: 4px 0; font: inherit; cursor: pointer; }
+.fc-bridge-legal i { width: 1px; height: 12px; background: rgba(255,255,255,0.18); }
 /* Import statements */
 .fc-imp-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--fc-border); border-radius: 14px; }
 .fc-imp-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--fc-border); font-size: 13px; cursor: pointer; }
