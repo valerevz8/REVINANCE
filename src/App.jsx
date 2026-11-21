@@ -2028,6 +2028,28 @@ function scanBankKey(s) {
   for (const [k, re] of SCAN_BANK_KEYS) if (re.test(t)) return k;
   return null;
 }
+// Own-account transfers read from a transfer / top-up receipt: "Permata -> DANA". Own = an e-wallet top-up, or the sender and the recipient
+// name on the receipt are the same person. Anything else (a transfer to a friend) stays a normal expense. The user can flip it in the draft.
+const SCAN_BANK_LABEL = { bca: 'BCA', mandiri: 'Mandiri', bri: 'BRI', bni: 'BNI', permata: 'Permata', cimb: 'CIMB', danamon: 'Danamon', btn: 'BTN', ocbc: 'OCBC', maybank: 'Maybank', bsi: 'BSI', jago: 'Jago', seabank: 'SeaBank', blu: 'blu', jenius: 'Jenius', gopay: 'GoPay', ovo: 'OVO', dana: 'DANA', shopeepay: 'ShopeePay', linkaja: 'LinkAja', paypal: 'PayPal', wise: 'Wise' };
+const SCAN_WALLET_KEYS = ['gopay', 'ovo', 'dana', 'shopeepay', 'linkaja', 'paypal', 'wise'];
+function sameHolder(a, b) {
+  const tok = (x) => String(x || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const A = tok(a), B = tok(b);
+  if (!A.length || !B.length || A[0].length < 3 || A[0] !== B[0]) return false;
+  if (A[1] && B[1]) return A[1].startsWith(B[1]) || B[1].startsWith(A[1]);
+  return true;
+}
+function ownTransferOf(item, accounts) {
+  if (!item || item.kind !== 'transfer' || item.type === 'income' || !(Number(item.amount) > 0)) return null;
+  const to = item.destKey || scanBankKey(item.destination);
+  const from = item.sourceKey || scanBankKey(item.source);
+  if (!to || to === from) return null;
+  if (!(item.topUp || sameHolder(item.senderName, item.recipientName))) return null;
+  const list = Array.isArray(accounts) ? accounts : [];
+  const hit = list.find((a) => scanBankKey(a.name) === to);
+  const fee = Number(item.fee) > 0 && Number(item.fee) < Number(item.amount) ? Number(item.fee) : 0;
+  return { key: to, name: hit ? hit.name : (SCAN_BANK_LABEL[to] || item.destination), type: SCAN_WALLET_KEYS.includes(to) ? 'ewallet' : 'bank', existingId: hit ? hit.id : null, fee, on: true };
+}
 // Returns the id of the user's account that matches the scanned source, or '' when none does (never guesses between unrelated banks).
 function matchAccountBySource(item, accounts) {
   const list = Array.isArray(accounts) ? accounts : [];
@@ -2103,6 +2125,10 @@ function warmAiFunction(fn) {
   } catch (e) { /* ignore */ }
 }
 
+const XFER_STR = {
+  id: { transfer: 'Transfer', between: 'Antar akun', newAcc: 'akun baru', fee: 'biaya', toExpense: 'Bukan akun saya? Catat sebagai pengeluaran', toTransfer: (n) => `Jadikan transfer ke ${n}` },
+  en: { transfer: 'Transfer', between: 'Between accounts', newAcc: 'new account', fee: 'fee', toExpense: 'Not my account? Record as an expense', toTransfer: (n) => `Make it a transfer to ${n}` },
+};
 const CAM_STR = {
   id: { shoot: 'Ambil foto', gallery: 'Galeri / file', close: 'Tutup', denied: 'Kamera tidak bisa dibuka. Pakai tombol di bawah untuk memotret atau pilih dari galeri.', starting: 'Membuka kamera…', hintReceipt: 'Posisikan struk di dalam bingkai', multiInfo: 'Bisa baca 10 struk dalam 1 scan, dan upload sampai 10 foto sekaligus.', typeInstead: 'Tulis / tempel teks', reading: 'Membaca…', retry: 'Coba lagi', retake: 'Foto ulang', pick: 'Pilih item kamu', itemsRead: 'item terbaca', equalMine: 'Bagianku (1/{n})', equalShare: 'Bagikan hasil bagi rata', multiHint: 'Bisa pilih sampai 10 foto sekaligus', tooMany: (n) => `Maksimal 10 foto sekali scan. ${n} foto dipilih, yang dibaca 10 pertama.`, notReadable: 'Struknya tidak terbaca jelas, jadi tidak dikenai kredit. Coba foto ulang lebih dekat dan terang, atau input manual.', tooManyErr: 'Maksimal 10 foto sekali scan.', limitedN: (kept, dropped) => `Kredit kamu hanya cukup untuk ${kept} struk, jadi ${dropped} struk lainnya belum dibaca dan tidak dikenai kredit. Scan ulang setelah kredit tersedia.`, unreadableN: (n) => `${n} struk tidak terbaca jelas (tidak dikenai kredit). Isi manual atau foto ulang.`, readingN: (n) => `Membaca ${n} foto…`, creditsUsed: (n) => `${n} kredit terpakai (1 per struk terbaca).` },
   en: { shoot: 'Take photo', gallery: 'Gallery / file', close: 'Close', denied: 'Camera is unavailable. Use the buttons below to take a photo or pick from your gallery.', starting: 'Opening camera…', hintReceipt: 'Place the receipt inside the frame', multiInfo: 'Reads up to 10 receipts in one scan, and upload up to 10 photos at once.', typeInstead: 'Type / paste text', reading: 'Reading…', retry: 'Try again', retake: 'Retake', pick: 'Pick your items', itemsRead: 'items read', equalMine: 'My share (1/{n})', equalShare: 'Share the equal split', multiHint: 'You can pick up to 10 photos at once', tooMany: (n) => `Max 10 photos per scan. ${n} selected, reading the first 10.`, notReadable: "Couldn't read the receipt clearly, so no credit was used. Retake it closer and brighter, or add it manually.", tooManyErr: 'Max 10 photos per scan.', limitedN: (kept, dropped) => `Your credits only cover ${kept} receipt(s), so ${dropped} other receipt(s) were not read and not charged. Scan again once credits are available.`, unreadableN: (n) => `${n} receipt(s) could not be read clearly (not charged). Fill in manually or retake.`, readingN: (n) => `Reading ${n} photos…`, creditsUsed: (n) => `${n} credit(s) used (1 per receipt read).` },
@@ -3321,7 +3347,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
   }
   // Move money between two of the user's accounts. Not income/expense: reports are untouched; both balances change by the exact amounts.
   async function addTransfer(o) {
-    const from = accountsRaw.find(a => a.id === o.fromId), to = accountsRaw.find(a => a.id === o.toId);
+    const from = accountsRef.current.find(a => a.id === o.fromId), to = accountsRef.current.find(a => a.id === o.toId);
     const amt = Number(o.amount), got = Number(o.toAmount), fee = Number(o.fee) || 0;
     if (!from || !to || from.id === to.id || !(amt > 0) || !(got > 0)) return { error: { message: 'transfer_invalid' } };
     const fromCur = isCcy(from.currency) ? from.currency : 'IDR', toCur = isCcy(to.currency) ? to.currency : 'IDR';
@@ -3905,13 +3931,33 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
   }
 
   // --- Accounts ---
-  async function addAccount(a) {
+  async function createAccountRow(a) { // returns the created account (or null); also visible to the balance guard right away
+    const pool = accountsRef.current;
     const { data, error } = await supabase.from('finance_accounts').insert({
       user_id: userId, name: a.name, type: a.type, balance: a.balance, currency: isCcy(a.currency) ? a.currency : 'IDR',
-      sort_order: accountsRaw.reduce((m, x) => Math.max(m, x.sortOrder != null ? x.sortOrder : 0), accountsRaw.length) + 1,
+      sort_order: pool.reduce((m, x) => Math.max(m, x.sortOrder != null ? x.sortOrder : 0), pool.length) + 1,
     }).select().single();
-    if (!error) setAccounts(prev => [...prev, mapAccountRow(data)]);
-    return !error;
+    if (error || !data) return null;
+    const row = mapAccountRow(data);
+    accountsRef.current = [...accountsRef.current, row];
+    setAccounts(prev => [...prev, row]);
+    return row;
+  }
+  async function addAccount(a) { return !!(await createAccountRow(a)); }
+  // One scanned item from the Draft sheet: a normal transaction, or an own-account transfer (creating the destination account when it does not exist yet).
+  const scanCreatedRef = useRef({});
+  async function saveScanItem(it) {
+    if (!it.transfer) return addTransaction(withTrip(it, false));
+    const tr = it.transfer; const cur = isCcy(it.currency) ? it.currency : 'IDR';
+    let toId = tr.toId;
+    if (!toId) {
+      const k = `${tr.toType}:${String(tr.toName).toLowerCase()}:${cur}`;
+      let acc = scanCreatedRef.current[k] && accountsRef.current.find(a => a.id === scanCreatedRef.current[k]);
+      if (!acc) { acc = await createAccountRow({ name: tr.toName, type: tr.toType, balance: 0, currency: cur }); if (acc) scanCreatedRef.current[k] = acc.id; }
+      if (!acc) return { error: { message: 'account_create_failed' } };
+      toId = acc.id;
+    }
+    return addTransfer({ fromId: it.accountId, toId, amount: tr.amount, toAmount: tr.amount, fee: tr.fee, date: it.date, note: (tr.note || '').slice(0, 80) });
   }
   async function reorderAccount(id, dir) { // swap with the neighbour, optimistic, persists the new 0..n order
     const list = accountsRaw; const i = list.findIndex(x => x.id === id); const j = i + dir;
@@ -4325,12 +4371,12 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
       )}
       {showQuickAddModal && (
         <QuickAddModal t={t} lang={lang} userId={userId} accounts={accounts} debts={debts} existingTx={transactionsRaw} onClose={() => setShowQuickAddModal(false)}
-          onSaveAll={async (items) => { const failed = []; for (let i = 0; i < items.length; i++) { const r = await addTransaction(withTrip(items[i], false)); if (r && r.error) failed.push(i); } if (failed.length === 0) setShowQuickAddModal(false); if (failed.length) flashTxToast(false, t.txToastFail); else flashTxToast(true, items.length > 1 ? t.txToastOkN.replace('{n}', items.length) : t.txToastOk); return failed; }}
+          onSaveAll={async (items) => { const failed = []; for (let i = 0; i < items.length; i++) { const r = await saveScanItem(items[i]); if (r && r.error) failed.push(i); } if (failed.length === 0) setShowQuickAddModal(false); if (failed.length) flashTxToast(false, t.txToastFail); else flashTxToast(true, items.length > 1 ? t.txToastOkN.replace('{n}', items.length) : t.txToastOk); return failed; }}
           onParsed={(prefill) => { setEditingTx(withTrip(prefill)); setShowQuickAddModal(false); setShowTxModal(true); }} />
       )}
       {showVoiceModal && (
         <VoiceCaptureModal t={t} lang={lang} accounts={accounts} debts={debts} existingTx={transactionsRaw} onClose={() => setShowVoiceModal(false)}
-          onSaveAll={async (items) => { const failed = []; for (let i = 0; i < items.length; i++) { const r = await addTransaction(withTrip(items[i], false)); if (r && r.error) failed.push(i); } if (failed.length === 0) setShowVoiceModal(false); if (failed.length) flashTxToast(false, t.txToastFail); else flashTxToast(true, items.length > 1 ? t.txToastOkN.replace('{n}', items.length) : t.txToastOk); return failed; }} />
+          onSaveAll={async (items) => { const failed = []; for (let i = 0; i < items.length; i++) { const r = await saveScanItem(items[i]); if (r && r.error) failed.push(i); } if (failed.length === 0) setShowVoiceModal(false); if (failed.length) flashTxToast(false, t.txToastFail); else flashTxToast(true, items.length > 1 ? t.txToastOkN.replace('{n}', items.length) : t.txToastOk); return failed; }} />
       )}
       {showSplitBillModal && (
         <SplitBillModal t={t} lang={lang} displayName={displayName} userId={userId} onClose={() => setShowSplitBillModal(false)}
@@ -6580,7 +6626,7 @@ const PDF_STR = {
     avgIncome: 'Rata-rata Pemasukan', avgExpenses: 'Rata-rata Pengeluaran', avgInvest: 'Rata-rata Investasi', avgNet: 'Rata-rata Perubahan Bersih',
     monthlyTrend: 'Tren Bulanan', month: 'Bulan', cashFlowTrend: 'Tren Arus Kas', incomeVsExpenses: 'Pemasukan vs Pengeluaran',
     netPerMonth: 'Perubahan Bersih per Bulan',
-    spendingOverview: 'Gambaran Pengeluaran', topCategories: 'Kategori Pengeluaran Teratas', totalAmount: 'Total', pctOfTotal: '% dari Total', avgPerMonth: 'Rata-rata / Bulan',
+    spendingOverview: 'Gambaran Pengeluaran', topCategories: 'Kategori Pengeluaran Teratas', others: 'Lainnya', totalAmount: 'Total', pctOfTotal: '% dari Total', avgPerMonth: 'Rata-rata / Bulan',
     financialBehavior: 'Perilaku Keuangan', firstMonth: 'Bulan Pertama', lastMonth: 'Bulan Terakhir', periodCol: 'Periode',
     debtPaymentMonths: 'Bulan dengan pembayaran hutang', investMonths: 'Bulan dengan investasi',
     debtOverview: 'Gambaran Hutang & Piutang', totalDebtPayments: 'Total Pembayaran Hutang', remainingDebt: 'Sisa Hutang',
@@ -6627,7 +6673,7 @@ const PDF_STR = {
     avgIncome: 'Avg. Monthly Income', avgExpenses: 'Avg. Monthly Expenses', avgInvest: 'Avg. Monthly Investment', avgNet: 'Avg. Monthly Net Change',
     monthlyTrend: 'Monthly Trend', month: 'Month', cashFlowTrend: 'Cash Flow Trend', incomeVsExpenses: 'Income vs Expenses',
     netPerMonth: 'Net Change by Month',
-    spendingOverview: 'Spending Overview', topCategories: 'Top Spending Categories', totalAmount: 'Total Amount', pctOfTotal: '% of Total', avgPerMonth: 'Average / Month',
+    spendingOverview: 'Spending Overview', topCategories: 'Top Spending Categories', others: 'Others', totalAmount: 'Total Amount', pctOfTotal: '% of Total', avgPerMonth: 'Average / Month',
     financialBehavior: 'Financial Behavior', firstMonth: 'First Month', lastMonth: 'Last Month', periodCol: 'Period',
     debtPaymentMonths: 'Months with debt payments', investMonths: 'Months with investment',
     debtOverview: 'Debt & Receivables Overview', totalDebtPayments: 'Total Debt Payments', remainingDebt: 'Remaining Debt',
@@ -6873,6 +6919,85 @@ function pdfTable(c, { head, body, foot, widths, aligns, startGap = 0, fontSize 
   });
   c.y = doc.lastAutoTable.finalY + 6;
 }
+
+// Donut like the in-app Category Breakdown: ring in the category colours, icon badges on the ring, legend with amounts, total in the centre.
+// Icons are rasterised once before rendering (pdfPrepIcons); without a canvas (or if it fails) the badge shows a plain colour dot.
+const pdfHex = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '')); const n = m ? parseInt(m[1], 16) : 0x786b5a; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+function pdfDonutItems(cats, S, max = 8) {
+  const top = cats.slice(0, max); const rest = cats.slice(max);
+  const items = top.map(x => ({ key: x.key, name: x.name, amount: x.amount, pct: x.pct, color: CAT_COLORS[x.key] || '#786b5a' }));
+  if (rest.length) items.push({ key: '_others', name: S.others, amount: rest.reduce((a, x) => a + x.amount, 0), pct: rest.reduce((a, x) => a + x.pct, 0), color: '#8E8E93' });
+  return items;
+}
+async function pdfPrepIcons(items) {
+  const out = {};
+  try {
+    if (typeof document === 'undefined' || typeof Image === 'undefined') return out;
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    await Promise.all(items.map((it) => new Promise((resolve) => {
+      try {
+        const Comp = it.key === '_others' ? MoreHorizontal : (CAT_ICONS[it.key] || MoreHorizontal);
+        let svg = renderToStaticMarkup(React.createElement(Comp, { size: 96, color: it.color, strokeWidth: 2 }));
+        if (!/xmlns=/.test(svg)) svg = svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+        const img = new Image();
+        img.onload = () => { try { const cv = document.createElement('canvas'); cv.width = 96; cv.height = 96; cv.getContext('2d').drawImage(img, 0, 0, 96, 96); out[it.key] = cv.toDataURL('image/png'); } catch { /* no canvas */ } resolve(); };
+        img.onerror = () => resolve();
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      } catch { resolve(); }
+    })));
+  } catch { /* icons are optional */ }
+  return out;
+}
+function pdfBadge(doc, cx, cy, r, color, icon, iconId) {
+  doc.setFillColor(255, 255, 255); doc.setDrawColor(...pdfHex(color)); doc.setLineWidth(0.45); doc.circle(cx, cy, r, 'FD');
+  if (icon) { const k = r * 1.2; try { doc.addImage(icon, 'PNG', cx - k / 2, cy - k / 2, k, k, iconId); } catch { /* skip icon */ } }
+  else { doc.setFillColor(...pdfHex(color)); doc.circle(cx, cy, r * 0.32, 'F'); }
+}
+function pdfDonut(c, { items, centerLabel, centerValue, icons = {} }) {
+  const { doc } = c; const total = items.reduce((a, x) => a + x.amount, 0) || 1;
+  const outer = 27; const inner = outer * 54 / 78; const br = 4.6; const boxH = (outer + br + 5) * 2;
+  const legendRowH = 8.2; const legendH = items.length * legendRowH;
+  pdfEnsure(c, Math.max(boxH, legendH) + 4);
+  const cx = PDF_M.l + outer + br + 6; const cy = c.y + boxH / 2;
+  const rad = Math.PI / 180;
+  // slices (clockwise from 12 o'clock), white gaps between them
+  let a0 = -90;
+  items.forEach((it) => {
+    const sweep = (it.amount / total) * 360; if (sweep <= 0) return;
+    const steps = Math.max(2, Math.ceil(sweep / 2)); const pts = [];
+    for (let i = 0; i <= steps; i++) { const a = (a0 + (sweep * i) / steps) * rad; pts.push([cx + outer * Math.cos(a), cy + outer * Math.sin(a)]); }
+    for (let i = steps; i >= 0; i--) { const a = (a0 + (sweep * i) / steps) * rad; pts.push([cx + inner * Math.cos(a), cy + inner * Math.sin(a)]); }
+    const segs = pts.slice(1).map((p, i) => [p[0] - pts[i][0], p[1] - pts[i][1]]);
+    doc.setFillColor(...pdfHex(it.color)); doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.7);
+    doc.lines(segs, pts[0][0], pts[0][1], [1, 1], 'FD', true);
+    it.mid = a0 + sweep / 2; a0 += sweep;
+  });
+  // icon badges outside the ring; fan them out when neighbouring slices are too thin for their badges
+  const rb = outer + br + 1.5; const n = items.length; const adj = items.map(it => it.mid); const sep = 2 * Math.asin(Math.min(1, (2 * br + 1) / (2 * rb))) / rad;
+  if (n > 1 && n * sep < 360) for (let pass = 0; pass < 80; pass++) { let moved = false; for (let i = 0; i < n; i++) { const j = (i + 1) % n; const g = j === 0 ? adj[0] + 360 - adj[i] : adj[j] - adj[i]; if (g < sep - 0.01) { const d = (sep - g) / 2; adj[i] -= d; adj[j] += d; moved = true; } } if (!moved) break; }
+  items.forEach((it, i) => {
+    const bx = cx + rb * Math.cos(adj[i] * rad), by = cy + rb * Math.sin(adj[i] * rad);
+    if (Math.abs(adj[i] - it.mid) > 2) { doc.setDrawColor(...pdfHex(it.color)); doc.setLineWidth(0.3); doc.line(cx + (outer + 0.4) * Math.cos(it.mid * rad), cy + (outer + 0.4) * Math.sin(it.mid * rad), bx, by); }
+    pdfBadge(doc, bx, by, br, it.color, icons[it.key], `rv-ic-${it.key}`);
+  });
+  // centre
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...PDF_C.grey);
+  doc.text(String(centerLabel).toUpperCase(), cx, cy - 1.2, { align: 'center' });
+  doc.setFont('helvetica', 'bold'); const cw2 = inner * 2 - 3; let fs = 9; doc.setFontSize(fs);
+  while (fs > 5.5 && doc.getTextWidth(centerValue) > cw2) { fs -= 0.5; doc.setFontSize(fs); }
+  doc.setTextColor(...PDF_C.ink); doc.text(centerValue, cx, cy + 3.6, { align: 'center' });
+  // legend (largest first) — icon ring, name, amount, share
+  const lx = PDF_M.l + (outer + br + 6) * 2 + 6; const lr = PDF_M.l + c.cw; let ly = c.y + (boxH - legendH) / 2 + legendRowH / 2;
+  items.forEach((it) => {
+    pdfBadge(doc, lx + 3, ly, 3, it.color, icons[it.key], `rv-ic-${it.key}`);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...PDF_C.ink);
+    doc.text(doc.splitTextToSize(it.name, lr - lx - 62)[0], lx + 8.5, ly + 1);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(pdfMoney(it.amount), lr - 14, ly + 1, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...PDF_C.grey); doc.text(pdfPct(it.pct, 'en', 0), lr, ly + 1, { align: 'right' });
+    ly += legendRowH;
+  });
+  c.y += Math.max(boxH, legendH) + 4;
+}
 function pdfHBars(c, items, opts = {}) {
   // items: [{label, value, display}] — horizontal bars scaled to the largest value.
   const { doc } = c; const rowH = 7.5; const labelW = 40; const valW = 30;
@@ -6972,8 +7097,8 @@ function renderMonthlyReport(model, ctx) {
   else {
     const top3 = model.expenseCats.slice(0, 3).reduce((s, x) => s + x.pct, 0);
     pdfCardRow(c, [{ label: S.totalExpenses, value: pdfMoney(m.expense) }, { label: S.topCategory, value: model.expenseCats[0].name }, { label: S.top3Share, value: pdfPct(top3, lang, 0) }], 20, true);
-    pdfHBars(c, model.expenseCats.slice(0, 8).map(x => ({ label: x.name, value: x.amount, display: pdfMoney(x.amount) })));
-    c.y += 3;
+    pdfDonut(c, { items: pdfDonutItems(model.expenseCats, S), centerLabel: t.expense, centerValue: pdfMoney(m.expense), icons: ctx.icons || {} });
+    c.y += 1;
     pdfSubhead(c, S.category);
     pdfTable(c, { head: [[S.category, S.amount, S.pctOfExpenses]], body: model.expenseCats.map(x => [x.name, pdfMoney(x.amount), pdfPct(x.pct, lang)]), widths: [c.cw - 80, 48, 32], aligns: ['left', 'right', 'right'], foot: [[S.total, pdfSumMoney(model.expenseCats.map(x => x.amount)), '100%']] });
   }
@@ -7092,7 +7217,7 @@ function renderPeriodReport(model, ctx) {
   if (model.expenseCats.length === 0) pdfEmpty(c, S.noSpending);
   else {
     const top = model.expenseCats.slice(0, 10);
-    pdfHBars(c, top.slice(0, 5).map(x => ({ label: x.name, value: x.amount, display: pdfMoney(x.amount) })));
+    pdfDonut(c, { items: pdfDonutItems(model.expenseCats, S), centerLabel: t.expense, centerValue: pdfMoney(T.expense), icons: ctx.icons || {} });
     pdfSubhead(c, S.topCategories);
     pdfTable(c, { head: [[S.category, S.totalAmount, S.pctOfTotal, S.avgPerMonth]], body: top.map(x => [x.name, pdfMoney(x.amount), pdfPct(x.pct, lang, 0), `${pdfMoney(x.amount / months)}`]), widths: [c.cw - 112, 38, 28, 46], aligns: ['left', 'right', 'right', 'right'] });
   }
@@ -7176,9 +7301,10 @@ function pdfFileName(kind, endKey, months, lang) {
 async function generateReportPdf({ kind, endKey, months, rows, transactions, debts, receivables, accounts, investBudgets, savingGoals, t, lang }) {
   await loadPdfLibs();
   const model = buildReportModel({ endKey, months: kind === 'monthly' ? 1 : months, rows, transactions, debts, receivables, accounts, investBudgets, savingGoals, t, lang });
+  const icons = await pdfPrepIcons(pdfDonutItems(model.expenseCats, PDF_STR[lang] || PDF_STR.en));
   const doc = kind === 'monthly'
-    ? renderMonthlyReport(model, { t, lang, accounts, debts, endKey })
-    : renderPeriodReport(model, { t, lang, months });
+    ? renderMonthlyReport(model, { t, lang, accounts, debts, endKey, icons })
+    : renderPeriodReport(model, { t, lang, months, icons });
   doc.save(pdfFileName(kind, endKey, months, lang));
 }
 
@@ -8640,6 +8766,7 @@ function AdvisorChat({ t, lang, userId, snapshot, reviApi }) {
   const [voiceSupported] = useState(() => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition));
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef(null);
+  const voiceMutedRef = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -8668,6 +8795,7 @@ function AdvisorChat({ t, lang, userId, snapshot, reviApi }) {
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (e) => {
+      if (voiceMutedRef.current) return; // after Send/cancel the recogniser can still deliver its last result: it must not refill the box
       let text = '';
       for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
       setInput(text);
@@ -8685,6 +8813,7 @@ function AdvisorChat({ t, lang, userId, snapshot, reviApi }) {
       setListening(false);
     } else {
       setInput('');
+      voiceMutedRef.current = false;
       startMeter(); // inside the tap, so the browser accepts the mic prompt
       recognitionRef.current.start();
       setListening(true);
@@ -8737,7 +8866,7 @@ function AdvisorChat({ t, lang, userId, snapshot, reviApi }) {
   useEffect(() => { if (!listening) stopMeter(); }, [listening]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => stopMeter(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function cancelListening() { try { recognitionRef.current && recognitionRef.current.stop(); } catch (e) { /* ignore */ } setListening(false); setInput(''); }
+  function cancelListening() { voiceMutedRef.current = true; try { recognitionRef.current && (recognitionRef.current.abort ? recognitionRef.current.abort() : recognitionRef.current.stop()); } catch (e) { /* ignore */ } setListening(false); setInput(''); }
 
   async function handleSend(e) {
     e.preventDefault();
@@ -8745,7 +8874,9 @@ function AdvisorChat({ t, lang, userId, snapshot, reviApi }) {
     if ((!typed && atts.length === 0) || busy) return;
     const question = typed || A.defQ;
     const sendAtts = atts;
-    if (listening && recognitionRef.current) { recognitionRef.current.stop(); setListening(false); }
+    voiceMutedRef.current = true;
+    if (recognitionRef.current) { try { recognitionRef.current.abort ? recognitionRef.current.abort() : recognitionRef.current.stop(); } catch (err) { /* ignore */ } }
+    if (listening) setListening(false);
     setInput('');
     setError('');
     setAtts([]);
@@ -12201,7 +12332,7 @@ function QuickAddModal({ t, lang, userId, accounts, debts, existingTx, onClose, 
         accountId: matchAccountBySource(it, accounts), // BCA notification -> the BCA account, Permata receipt -> the Permata account
         receiptPath: pathOf(it),
       });
-      if (items.length <= 1) { onParsed(toPrefill(items[0])); return; }
+      if (items.length <= 1 && !ownTransferOf(items[0], accounts)) { onParsed(toPrefill(items[0])); return; }
       // Several receipts: show the same draft list as Voice Add. Unreadable ones stay unselected for a manual fix (they were not charged).
       const drafts = items.map((it, i) => {
         const pf = toPrefill(it);
@@ -12212,6 +12343,7 @@ function QuickAddModal({ t, lang, userId, accounts, debts, existingTx, onClose, 
           category: pf.type === 'income' ? null : pf.category,
           incomeCategory: pf.type === 'income' ? pf.category : null,
           accountId: pf.accountId || '', date: pf.date, dateUnread: pf.dateUnread, note: '', payVia: 'account', cardName: '', cardDue: '', selected: hasAmount, receiptPath: pf.receiptPath, fromReceipt: imgs.length > 0,
+          xfer: ownTransferOf(it, accounts),
         };
       });
       const used = new Set(drafts.map((d) => d.receiptPath).filter(Boolean));
@@ -12483,6 +12615,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
       type: d.type, category: d.type === 'income' ? (INCOME_CATS.includes(d.incomeCategory) ? d.incomeCategory : 'other_income') : (d.category || 'other_expense'),
       amount: Number(d.amount), currency: isCcy(d.currency) ? d.currency : APP_CCY, date: d.date, note: d.name + (d.note ? ` — ${d.note}` : ''),
       accountId: isCardDraft(d) ? null : (d.accountId || null), debtId: null, receiptPath: d.receiptPath || null,
+      ...(d.xfer && d.xfer.on ? { transfer: { toId: d.xfer.existingId, toName: d.xfer.name, toType: d.xfer.type, fee: d.xfer.fee || 0, amount: roundCcy(Number(d.amount) - (d.xfer.fee || 0), isCcy(d.currency) ? d.currency : APP_CCY), note: d.name } } : {}),
       ...(isCardDraft(d) ? { card: { name: String(d.cardName).trim().replace(/\s+/g, ' ').slice(0, 40), dueDate: draftCardDue(d, cardBillsAll), interestPct: Number(d.cardInterest !== undefined ? d.cardInterest : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).interest) || 0, adminFee: Number(d.cardAdmin !== undefined ? d.cardAdmin : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).admin) || 0, tenor: Number(d.cardTenor) || 1 } } : {}),
     }));
     try {
@@ -12542,22 +12675,26 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
             {initialNotice && <div className="fc-field-note" style={{ marginBottom: 8 }} data-testid="scan-notice">{initialNotice}</div>}
             <div className="fc-draft-list">
               {drafts.map((d, idx) => {
-                const Icon = d.type === 'income' ? Banknote : (CAT_ICONS[d.category] || MoreHorizontal);
+                const Icon = d.type === 'income' ? Banknote : (d.xfer && d.xfer.on ? ArrowLeftRight : (CAT_ICONS[d.category] || MoreHorizontal));
                 const color = d.type === 'income' ? '#3D7A45' : (CAT_COLORS[d.category] || 'var(--fc-gold-bright)');
                 const accountName = isCardDraft(d) ? (String(d.cardName || '').trim() || CS.onCard) : (d.accountId ? (accounts || []).find(a => a.id === d.accountId)?.name : null);
                 const subtitle = d.type === 'income' ? (t.categories[d.incomeCategory] || t.income) : (d.category ? (t.categories[d.category] || d.category) : t.uncategorizedLabel);
                 const invalid = !(Number(d.amount) > 0);
                 const dup = dupFlags[idx];
+                const xf = d.xfer && d.xfer.on ? d.xfer : null;
+                const XS = XFER_STR[lang] || XFER_STR.en;
+                const fromName = (accounts || []).find(a => a.id === d.accountId)?.name || '';
                 return (
-                  <div key={d.localId} className={`fc-draft-row ${invalid ? 'fc-draft-row-invalid' : ''} ${dup || fundFlags[idx] ? 'fc-draft-row-dup' : ''}`} title={dup ? DUP[dup] : undefined}>
+                  <React.Fragment key={d.localId}>
+                  <div className={`fc-draft-row ${invalid ? 'fc-draft-row-invalid' : ''} ${dup || fundFlags[idx] ? 'fc-draft-row-dup' : ''}`} title={dup ? DUP[dup] : undefined}>
                     <button type="button" className={`fc-draft-check ${d.selected ? 'fc-draft-check-active' : ''}`} onClick={() => toggleSelected(idx)} disabled={invalid} title={invalid ? t.itemNameLabel : ''}>
                       {d.selected && <CheckCircle2 size={16} />}
                     </button>
                     <button type="button" className="fc-draft-body" onClick={() => { setEditingIdx(idx); setStep('edit'); }}>
                       <span className="fc-draft-icon" style={{ background: `${color}26` }}><Icon size={16} color={color} /></span>
                       <span className="fc-draft-text">
-                        <span className="fc-draft-name">{d.name || t.itemNameLabel}</span>
-                        <span className="fc-draft-sub" data-testid="draft-sub">{subtitle}{accountName ? ` · ${accountName}` : ''}{isCardDraft(d) ? ` · ${CS.badge}` : ''}{d.dateUnread ? ` · ⚠ ${(DATE_STR[lang] || DATE_STR.en).unreadShort}` : ''}</span>
+                        <span className="fc-draft-name">{xf ? `${fromName ? fromName + ' → ' : '→ '}${xf.name}` : (d.name || t.itemNameLabel)}</span>
+                        <span className="fc-draft-sub" data-testid="draft-sub">{xf ? `${XS.transfer}${xf.existingId ? '' : ` · ${XS.newAcc}`}${xf.fee ? ` · ${XS.fee} ${fmtMoney(xf.fee, d.currency)}` : ''}` : <>{subtitle}{accountName ? ` · ${accountName}` : ''}</>}{isCardDraft(d) ? ` · ${CS.badge}` : ''}{d.dateUnread ? ` · ⚠ ${(DATE_STR[lang] || DATE_STR.en).unreadShort}` : ''}</span>
                         {dup && <span className="fc-draft-dup" data-testid="draft-dup">⚠ {DUP[dup]}</span>}
                         {fundFlags[idx] && <span className="fc-draft-dup fc-draft-short" data-testid="draft-funds">⛔ {(FUNDS_STR[lang] || FUNDS_STR.en).draftNote(fundFlags[idx].name, fmtMoney(fundFlags[idx].avail, fundFlags[idx].aCur), fmtMoney(fundFlags[idx].need, fundFlags[idx].aCur))}</span>}
                       </span>
@@ -12566,10 +12703,12 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
                       </span>
                     </button>
                   </div>
+                  {d.xfer && <button type="button" className="fc-draft-xfer" data-testid="draft-xfer-toggle" data-on={d.xfer.on ? '1' : '0'} onClick={() => setDrafts((prev) => prev.map((x, i) => (i === idx ? { ...x, xfer: { ...x.xfer, on: !x.xfer.on } } : x)))}>{d.xfer.on ? XS.toExpense : XS.toTransfer(d.xfer.name)}</button>}
+                  </React.Fragment>
                 );
               })}
             </div>
-            {selectedDrafts.some(d => d.type === 'expense') && (
+            {selectedDrafts.some(d => d.type === 'expense' && !(d.xfer && d.xfer.on)) && (
               <div className="fc-draft-bulk" data-testid="draft-bulk">
                 {!bulk ? (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -13968,6 +14107,8 @@ const CSS = `
 .fc-voice-timer { font-size: 13px; color: var(--fc-text-dim); margin-top: 10px; font-family: 'Calibri','Segoe UI',sans-serif; }
 .fc-draft-list, .fc-draft-bulk, .fc-draft-footer { flex-shrink: 0; }
 .fc-draft-list { display: flex; flex-direction: column; gap: 8px; text-align: left; max-height: 50vh; overflow-y: auto; margin-bottom: 4px; }
+.fc-draft-xfer { display: block; width: 100%; margin: -2px 0 4px; padding: 6px 14px; background: none; border: 0; color: var(--fc-gold-bright); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.fc-draft-xfer[data-on='0'] { color: var(--fc-text-dim); }
 .fc-draft-row { display: flex; align-items: center; gap: 8px; background: var(--fc-surface2); border: 1px solid var(--fc-border); border-radius: 18px; padding: 8px 10px; }
 .fc-draft-row-invalid { border-color: rgba(176,88,79,0.4); }
 .fc-draft-dup { font-size: 11px; line-height: 1.3; color: #D9A441; white-space: normal; }
