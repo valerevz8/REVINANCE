@@ -209,7 +209,7 @@ const T = {
     upgradeToPro: 'Upgrade ke Pro', maybeLater: 'Nanti',
     period7d: '7H', period1m: '1B', period3m: '3B', period1y: '1T',
     dataAvailableSince: 'Data tersedia sejak', noAccountTx: 'Belum ada transaksi di akun ini.', moneyFlow: 'Arus Uang',
-    settingsProfile: 'PROFIL', profileName: 'Nama', spaceLabel: 'Ledger',
+    settingsProfile: 'PROFIL', profileName: 'Nama', bankNameLabel: 'Nama di bank', bankNameHint: 'Opsional. Isi nama lengkap persis seperti di rekening bank kamu. Dipakai waktu scan: resi atau transfer yang ditujukan ke nama ini otomatis dikenali sebagai pemasukan ke akun kamu, bukan pengeluaran.', spaceLabel: 'Ledger',
     settingsMoney: 'KEUANGAN', settingsGoals: 'Target Tabungan/Bulan', settingsBudget: 'Kategori & Budget', settingsRecurring: 'Transaksi Berulang', settingsReminders: 'Pengingat',
     savingsTargetLabel: 'Target Tabungan per Bulan', savingsTargetHint: 'Realisasinya bakal keliatan di halaman Review, dibandingin sama sisa uang (pemasukan − pengeluaran − bayar hutang) tiap bulan.',
     settingsPreferences: 'PREFERENSI', settingsCurrency: 'Mata Uang', settingsFx: 'Kurs', fxUpdated: 'Diperbarui', fxUnavailable: 'Kurs terbaru tidak tersedia. Menampilkan kurs terakhir yang tersedia.', fxRefresh: 'Perbarui kurs', fxNoRate: 'Kurs belum tersedia. Coba lagi sebentar.', fxImpact: 'Akan memengaruhi akun sekitar', txCurrency: 'Mata uang transaksi', accCurrency: 'Mata uang akun', accCurrencyLocked: 'Mata uang akun tidak bisa diubah setelah dibuat.', debtImpact: 'Akan mengurangi hutang sekitar', ccyLocked: 'Mata uang tidak bisa diubah setelah dibuat.', itemCurrency: 'Mata uang', displayCurrencyNote: 'Mata uang tampilan untuk total dan ringkasan. Transaksi tetap dalam mata uang aslinya.', settingsLanguage: 'Bahasa', settingsNotifications: 'Notifikasi', settingsAppearance: 'Tampilan',
@@ -424,7 +424,7 @@ const T = {
     upgradeToPro: 'Upgrade to Pro', maybeLater: 'Maybe Later',
     period7d: '7D', period1m: '1M', period3m: '3M', period1y: '1Y',
     dataAvailableSince: 'Data available since', noAccountTx: 'No transactions on this account yet.', moneyFlow: 'Money Flow',
-    settingsProfile: 'PROFILE', profileName: 'Name', spaceLabel: 'Ledger',
+    settingsProfile: 'PROFILE', profileName: 'Name', bankNameLabel: 'Name on your bank account', bankNameHint: 'Optional. Your full name exactly as it appears on your bank account. Used when scanning: a receipt or transfer addressed to this name is recognised as income into your account, not an expense.', spaceLabel: 'Ledger',
     settingsMoney: 'MONEY', settingsGoals: 'Monthly Savings Target', settingsBudget: 'Category & Budget', settingsRecurring: 'Recurring Transactions', settingsReminders: 'Reminders',
     savingsTargetLabel: 'Monthly Savings Target', savingsTargetHint: "Your progress will show on the Review page, compared against what's left each month (income − expenses − debt payments).",
     settingsPreferences: 'PREFERENCES', settingsCurrency: 'Currency', settingsFx: 'Exchange rates', fxUpdated: 'Updated', fxUnavailable: 'Latest exchange rate unavailable. Showing last available rate.', fxRefresh: 'Refresh rates', fxNoRate: 'Exchange rate not available yet. Try again shortly.', fxImpact: 'Will affect the account by about', txCurrency: 'Transaction currency', accCurrency: 'Account currency', accCurrencyLocked: "Account currency can't be changed after it's created.", debtImpact: 'Will reduce the debt by about', ccyLocked: "Currency can't be changed after it's created.", itemCurrency: 'Currency', displayCurrencyNote: 'Display currency for totals and summaries. Transactions stay in their original currency.', settingsLanguage: 'Language', settingsNotifications: 'Notifications', settingsAppearance: 'Appearance',
@@ -1013,6 +1013,7 @@ function aiCreditMessage(data, lang) {
   return null;
 }
 const FX_TTL_MS = 60 * 60 * 1000; // ~hourly; the edge function also caches server-side
+let APP_HOLDER = '';             // "Nama di bank": the user's name on their bank accounts (Settings). Sent with scans so transfers addressed to the user read as income.
 let APP_TRAVEL = null;           // Travel mode hint { ccy, country } while Travel mode is on (Pro); null in Daily mode. Read by scan / split bill.
 const TRAVEL_COUNTRIES = [
   { ccy: 'USD', id: 'Amerika Serikat', en: 'United States' }, { ccy: 'EUR', id: 'Eropa (Zona Euro)', en: 'Europe (Eurozone)' }, { ccy: 'GBP', id: 'Inggris', en: 'United Kingdom' },
@@ -2033,7 +2034,7 @@ function scanBankKey(s) {
 const SCAN_BANK_LABEL = { bca: 'BCA', mandiri: 'Mandiri', bri: 'BRI', bni: 'BNI', permata: 'Permata', cimb: 'CIMB', danamon: 'Danamon', btn: 'BTN', ocbc: 'OCBC', maybank: 'Maybank', bsi: 'BSI', jago: 'Jago', seabank: 'SeaBank', blu: 'blu', jenius: 'Jenius', gopay: 'GoPay', ovo: 'OVO', dana: 'DANA', shopeepay: 'ShopeePay', linkaja: 'LinkAja', paypal: 'PayPal', wise: 'Wise' };
 const SCAN_WALLET_KEYS = ['gopay', 'ovo', 'dana', 'shopeepay', 'linkaja', 'paypal', 'wise'];
 function sameHolder(a, b) {
-  const tok = (x) => String(x || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const tok = (x) => String(x || '').toLowerCase().replace(/\b(bpk|bapak|ibu|sdr|sdri|tn|ny|nn|mr|mrs|ms)\b\.?/g, ' ').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
   const A = tok(a), B = tok(b);
   if (!A.length || !B.length || A[0].length < 3 || A[0] !== B[0]) return false;
   if (A[1] && B[1]) return A[1].startsWith(B[1]) || B[1].startsWith(A[1]);
@@ -2804,6 +2805,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
   const [whatsNew, setWhatsNew] = useState(null); // null | 'auto' (once per update) | 'manual' (Settings)
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [displayName, setDisplayName] = useState('');
+  const [bankName, setBankName] = useState('');
   const [avatarPath, setAvatarPath] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [spaceName, setSpaceName] = useState('');
@@ -2832,15 +2834,17 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
     setShowOnboardingWizard(false);
     return true;
   }
-  async function updateProfile(name, space) {
+  async function updateProfile(name, space, bank) {
+    const holder = String(bank || '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const { error } = await supabase.from('finance_settings').upsert(
-      { user_id: userId, display_name: name, space_name: (space || '').trim() || null },
+      { user_id: userId, display_name: name, space_name: (space || '').trim() || null, bank_name: holder || null },
       { onConflict: 'user_id' }
     );
     if (error) { console.error('updateProfile failed:', error); rvSaved(false); return false; }
     rvSaved();
     setDisplayName(name);
     setSpaceName((space || '').trim());
+    APP_HOLDER = holder; setBankName(holder);
     return true;
   }
 
@@ -2940,6 +2944,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
       if (settingsRes.data && settingsRes.data.recurring_in_home === false) setRecurringInHome(false);
       if (settingsRes.data?.savings_target != null) setSavingsTargetRaw({ amount: Number(settingsRes.data.savings_target), currency: isCcy(settingsRes.data.savings_target_currency) ? settingsRes.data.savings_target_currency : 'IDR' });
       setDisplayName(settingsRes.data?.display_name || '');
+      APP_HOLDER = settingsRes.data?.bank_name || ''; setBankName(APP_HOLDER);
       setSpaceName(settingsRes.data?.space_name || '');
       setAvatarPath(settingsRes.data?.avatar_path || null);
       if (accountRes.data) setAccounts(sortAccounts(accountRes.data.map(mapAccountRow)));
@@ -4266,7 +4271,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
       )}
       {showSettingsPanel && (
         <SettingsPanel key={settingsKey} accounts={accounts} transactions={transactions} onImportStatement={importStatementRows} accountIntent={accountIntent} proUntil={subInfo?.proUntil} graceUntil={subInfo?.graceUntil} onOpenWhatsNew={() => setWhatsNew('manual')} userId={userId} userEmail={session?.user?.email} isPro={isPro} t={t} lang={lang} setLang={changeLang} theme={theme} onThemeChange={changeTheme}
-          displayName={displayName} spaceName={spaceName} onSaveProfile={updateProfile}
+          displayName={displayName} spaceName={spaceName} bankName={bankName} onSaveProfile={updateProfile}
           notificationsEnabled={notificationsEnabled} onChangeNotifications={changeNotifications} recurringInHome={recurringInHome} onChangeRecurringInHome={changeRecurringInHome}
           onExportData={exportAllData} weekStart={weekStart} onChangeWeekStart={changeWeekStart} budgetResetDay={budgetResetDay} onChangeBudgetResetDay={changeBudgetResetDay}
           dailyBudgetText={dailyBudgetRaw.amount > 0 ? fmtMoney(dailyBudgetRaw.amount, dailyBudgetRaw.currency) : ''} onOpenDailyBudget={() => { fromSettings.current = true; setShowSettingsPanel(false); setShowDailyBudgetModal(true); }} savingsTarget={savingsTarget} savingsTargetText={savingsTargetRaw.amount > 0 ? fmtMoney(savingsTargetRaw.amount, savingsTargetRaw.currency) : ''} onOpenSavingsTarget={() => setShowSavingsTargetModal(true)} emergencyText={emergencyGoal ? fmtMoney(emergencyGoal.nativeTarget, emergencyGoal.currency) : ''} onOpenEmergency={() => { fromSettings.current = true; setShowSettingsPanel(false); setShowEmergencyModal(true); }}
@@ -8387,6 +8392,17 @@ function Review({ section = 'overview', t, lang, transactions, monthTx, totals, 
   const toggleHideBal = () => setHideBal(v => { const n = !v; try { localStorage.setItem('rv_hide_balance', n ? '1' : '0'); } catch (e) { /* ignore */ } return n; });
   const stackRef = useRef(null); const snapRef = useRef(null);
   const orderSig = accList.map(a => a.id).join('|');
+  const seenIds = useRef(null);
+  useEffect(() => { // a newly added card can land far down a long stack: bring it into view and flash it so it is obvious the account was saved
+    const ids = accList.map(x => x.id); const prev = seenIds.current; seenIds.current = ids;
+    if (!prev || !stackRef.current) return;
+    const added = ids.filter(id => !prev.includes(id)); if (added.length !== 1) return;
+    const el = [...stackRef.current.querySelectorAll('[data-wid]')].find(e => e.getAttribute('data-wid') === added[0]); if (!el) return;
+    el.classList.add('fc-wslot-new');
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* ignore */ }
+    const tm = setTimeout(() => el.classList.remove('fc-wslot-new'), 1800);
+    return () => clearTimeout(tm);
+  }, [orderSig]); // eslint-disable-line
   const measureSlots = () => { const m = {}; if (stackRef.current) stackRef.current.querySelectorAll('[data-wid]').forEach(el => { m[el.getAttribute('data-wid')] = el.offsetTop; }); return m; };
   useLayoutEffect(() => { // FLIP: slide cards from their old spot to the new one
     const before = snapRef.current; snapRef.current = null;
@@ -10638,11 +10654,23 @@ function FeedbackModal({ lang, mode, onClose }) {
     </div>
   );
 }
+const DUO_STR = {
+  id: { title: 'Pro Duo', soon: 'Segera', close: 'Mengerti',
+    desc: 'Satu paket Pro untuk dua orang. Satu berlangganan, satunya diundang, lalu kalian bisa menggabungkan akun dan saling melihat pengeluaran.',
+    points: ['Untuk pasangan atau teman serumah.', 'Akun dan transaksi bisa dibagi atau tetap pribadi.', 'Masing-masing punya kredit AI sendiri.'],
+    note: 'Segera hadir.' },
+  en: { title: 'Pro Duo', soon: 'Soon', close: 'Got it',
+    desc: 'One Pro plan for two people. One of you subscribes, the other is invited, and you can combine accounts and see each other\'s spending.',
+    points: ['Made for couples and housemates.', 'Accounts and transactions can be shared or kept private.', 'Each of you keeps your own AI credits.'],
+    note: 'Coming soon.' },
+};
 const t_cancel = (lang) => (lang === 'id' ? 'Batal' : 'Cancel');
 
-function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsNew, userId, userEmail, isPro, t, lang, setLang, theme, onThemeChange, displayName, spaceName, onSaveProfile, notificationsEnabled, onChangeNotifications, recurringInHome, onChangeRecurringInHome, onExportData, weekStart, onChangeWeekStart, budgetResetDay, onChangeBudgetResetDay, savingsTarget, dailyBudgetText, onOpenDailyBudget, savingsTargetText, onOpenSavingsTarget, emergencyText, onOpenEmergency, proUntil, accountIntent, homeMode, onHomeMode, travelCcy, onTravelCcy, appCcy, onChangeCurrency, appTz, onChangeTimezone, fxAt, fxFailed, fxRefreshing, onRefreshFx, onOpenReminders, onClose, onOpenBudget, onOpenRecurring, graceUntil }) {
+function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsNew, userId, userEmail, isPro, t, lang, setLang, theme, onThemeChange, displayName, spaceName, bankName, onSaveProfile, notificationsEnabled, onChangeNotifications, recurringInHome, onChangeRecurringInHome, onExportData, weekStart, onChangeWeekStart, budgetResetDay, onChangeBudgetResetDay, savingsTarget, dailyBudgetText, onOpenDailyBudget, savingsTargetText, onOpenSavingsTarget, emergencyText, onOpenEmergency, proUntil, accountIntent, homeMode, onHomeMode, travelCcy, onTravelCcy, appCcy, onChangeCurrency, appTz, onChangeTimezone, fxAt, fxFailed, fxRefreshing, onRefreshFx, onOpenReminders, onClose, onOpenBudget, onOpenRecurring, graceUntil }) {
   const [editName, setEditName] = useState(displayName || '');
   const [editSpace, setEditSpace] = useState(spaceName || '');
+  const [editBank, setEditBank] = useState(bankName || '');
+  const [showDuo, setShowDuo] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [staticDoc, setStaticDoc] = useState(null); // 'privacy' | 'terms' | null
   const [showAccount, setShowAccount] = useState(!!accountIntent);
@@ -10655,7 +10683,7 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
   async function saveProfile() {
     if (!editName.trim()) return;
     setSavingProfile(true);
-    await onSaveProfile(editName.trim(), editSpace.trim());
+    await onSaveProfile(editName.trim(), editSpace.trim(), editBank.trim());
     setSavingProfile(false);
   }
 
@@ -10664,11 +10692,22 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
       <div className="fc-settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="fc-modal-header"><span>{t.settings}</span><button type="button" className="fc-icon-btn" onClick={onClose}><X size={16} /></button></div>
 
+        {showDuo && (() => { const DU = DUO_STR[lang] || DUO_STR.en; return (
+        <div className="fc-modal-backdrop fc-duo-backdrop" data-testid="duo-popup" onClick={(e) => { e.stopPropagation(); setShowDuo(false); }}>
+          <div className="fc-duo-pop" onClick={(e) => e.stopPropagation()}>
+            <div className="fc-duo-pop-head"><span>{DU.title}</span><span className="fc-acc-chip">{DU.soon}</span></div>
+            <p>{DU.desc}</p>
+            <ul>{DU.points.map((x) => <li key={x}>{x}</li>)}</ul>
+            <button type="button" className="fc-btn-primary" data-testid="duo-close" onClick={() => setShowDuo(false)}>{DU.close}</button>
+          </div>
+        </div>); })()}
         <div className="fc-settings-scroll">
           <div className="fc-settings-group-title">{t.settingsProfile}</div>
           <div className="fc-settings-block">
             <label className="fc-field"><span>{t.profileName}</span><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} /></label>
             <label className="fc-field"><span>{t.spaceLabel}</span><input type="text" value={editSpace} placeholder={displayName ? t.ledgerTitle.replace('{name}', displayName) : ''} onChange={(e) => setEditSpace(e.target.value)} /></label>
+            <label className="fc-field"><span>{t.bankNameLabel}</span><input type="text" data-testid="bank-name-input" value={editBank} autoComplete="name" onChange={(e) => setEditBank(e.target.value)} />
+              <small className="fc-field-hint" data-testid="bank-name-hint">{t.bankNameHint}</small></label>
             <button type="button" className="fc-btn-primary" style={{ alignSelf: 'flex-start' }} disabled={savingProfile} onClick={saveProfile}>
               {savingProfile ? <RvLoader size={14} className="fc-rvdraw-btn" /> : t.save}
             </button>
@@ -10680,6 +10719,11 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
               <span>{(ACC_STR[lang] || ACC_STR.en).title}</span>
               <span className="fc-acc-rowright"><span className={`fc-acc-chip ${isPro ? 'fc-acc-chip-pro' : ''}`}>{isPro ? 'Pro ✦' : 'Free'}</span><ChevronRight size={15} /></span>
             </button>
+            {(() => { const DU = DUO_STR[lang] || DUO_STR.en; return (
+              <div className="fc-settings-row" style={{ cursor: 'default' }} data-testid="duo-row">
+                <span>{DU.title}</span>
+                <button type="button" className="fc-duo-soon" data-testid="duo-soon" onClick={() => setShowDuo(true)}>{DU.soon}</button>
+              </div>); })()}
           </div>
 
           <div className="fc-settings-group-title">{proStr(lang).creditsTitle}</div>
@@ -12302,6 +12346,7 @@ function QuickAddModal({ t, lang, userId, accounts, debts, existingTx, onClose, 
     try {
       const body = { defaultCurrency: (APP_TRAVEL && APP_TRAVEL.ccy) || APP_CCY, today: todayISO(), incomeCategories: INCOME_CATS };
       if (APP_TRAVEL) { body.hintCurrency = APP_TRAVEL.ccy; body.hintCountry = APP_TRAVEL.country; }
+      if (APP_HOLDER) body.holderName = APP_HOLDER;
       if (textVal && textVal.trim()) body.text = textVal.trim();
       if (imgs.length === 1) { body.image = imgs[0].base64; body.mediaType = imgs[0].mediaType; }
       else if (imgs.length > 1) body.images = imgs.map((im) => ({ data: im.base64, mediaType: im.mediaType }));
@@ -14982,6 +15027,8 @@ select.fc-sheet-ctl { cursor: pointer; }
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 -5px 16px rgba(0,0,0,0.26);
   transition: margin-bottom .6s var(--wease), box-shadow .6s var(--wease), transform .6s var(--wease); -webkit-tap-highlight-color: transparent; }
 .fc-wslot:last-child .fc-wcard { margin-bottom: 0; }
+.fc-wslot-new .fc-wcard { animation: fc-wnew 1.6s ease-out 1; }
+@keyframes fc-wnew { 0% { box-shadow: 0 0 0 0 rgba(212,175,110,0.75); transform: scale(0.96); } 35% { box-shadow: 0 0 0 10px rgba(212,175,110,0.25); transform: scale(1.02); } 100% { box-shadow: 0 0 0 0 rgba(212,175,110,0); transform: scale(1); } }
 .fc-wcard:active { transform: scale(0.985); }
 .fc-wcard-on { margin-bottom: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 12px 28px rgba(0,0,0,0.38); }
 .fc-app[data-theme="light"] .fc-wcard:not(.fc-wcard-custom) { color: #D9CDB8; background: linear-gradient(145deg, #3B3631 0%, #17140F 50%, #000 100%); border: 1px solid rgba(217,205,184,0.22); }
@@ -15166,6 +15213,14 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-debt-due { font-size: 11px; color: var(--fc-text-dim); margin-top: 6px; }
 .fc-field { display:flex; flex-direction:column; gap: 5px; font-size: 12px; color: var(--fc-text-dim); }
 .fc-field input, .fc-field select { background: var(--fc-surface2); border: 1px solid var(--fc-border); color: var(--fc-text); padding: 9px 10px; border-radius: 11px; font-size: 14px; font-family: 'Calibri','Segoe UI',sans-serif; }
+.fc-duo-soon { background: var(--fc-surface2); border: 1px solid var(--fc-border); color: var(--fc-gold-bright); font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; }
+.fc-duo-backdrop { z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.fc-duo-pop { width: 100%; max-width: 340px; background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: 24px; padding: 24px 22px 22px; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
+.fc-duo-pop-head { display: flex; align-items: center; justify-content: space-between; font-size: 18px; color: var(--fc-text); margin-bottom: 12px; }
+.fc-duo-pop p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; color: var(--fc-text-dim); }
+.fc-duo-pop ul { margin: 0 0 18px; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; line-height: 1.5; color: var(--fc-text-dim); }
+.fc-duo-pop .fc-btn-primary { width: 100%; display: flex; align-items: center; justify-content: center; text-align: center; }
+.fc-field-hint { display:block; font-size: 11px; line-height: 1.45; color: var(--fc-text-dim); opacity: 0.8; margin-top: 2px; }
 .fc-field select option, .fc-field select optgroup { background-color: var(--fc-surface2); color: var(--fc-text); }
 /* Native dropdown lists (desktop Chromium/Opera/Firefox) — force the theme colors explicitly, for every <select> in the app. */
 .fc-app[data-theme="dark"] select, .fc-authwrap[data-theme="dark"] select, .fc-wizard[data-theme="dark"] select { color-scheme: dark; }
