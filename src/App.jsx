@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, ComposedChart, Line, Legend, Area, ReferenceLine } from 'recharts';
-import { Palette, Sigma, Upload, Paperclip, LayoutGrid, RotateCcw, ArrowUp, Clock, Info, ArrowLeftRight, ArrowDown, Lock, Plus, Trash2, TrendingUp, TrendingDown, Wallet, CreditCard, PiggyBank, PieChart as PieIcon, Table as TableIcon, Globe, X, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, AlertCircle, CheckCircle2, LogOut, Eye, EyeOff, Sun, Moon, Pencil, Share2, FileText, Download, Utensils, Home, Car, Film, Receipt, HeartPulse, Dumbbell, ShoppingBag, MoreHorizontal, Banknote, Laptop, Video, Landmark, Repeat, Mail, Mic, Plane, GraduationCap, Users, PawPrint, Briefcase, Coins, BarChart3, Zap, Bitcoin, LineChart as LineChartIcon, Maximize2, Minimize2, Camera, ImagePlus, HeartHandshake, Coffee, RefreshCw, Fingerprint, ChevronUp, ChevronDown, Link2, Megaphone, Package, Bike, Gift, Store, Star, Flame, Trophy, CalendarHeart, Pin, History } from 'lucide-react';
+import { Palette, Sigma, Upload, Paperclip, LayoutGrid, RotateCcw, ArrowUp, Clock, Info, ArrowLeftRight, ArrowDown, Lock, Plus, Trash2, TrendingUp, TrendingDown, Wallet, CreditCard, PiggyBank, PieChart as PieIcon, Table as TableIcon, Globe, X, ChevronLeft, ChevronRight, ClipboardList, LayoutDashboard, AlertCircle, CheckCircle2, LogOut, Eye, EyeOff, Sun, Moon, Pencil, Share2, FileText, Download, Utensils, Home, Car, Film, Receipt, HeartPulse, Dumbbell, ShoppingBag, MoreHorizontal, Banknote, Laptop, Video, Landmark, Repeat, Mail, Mic, Plane, GraduationCap, Users, PawPrint, Briefcase, Coins, BarChart3, Zap, Bitcoin, LineChart as LineChartIcon, Maximize2, Minimize2, Camera, ImagePlus, HeartHandshake, Coffee, RefreshCw, Fingerprint, ChevronUp, ChevronDown, Link2, Megaphone, Package, Bike, Gift, Store, Star, Flame, Trophy, CalendarHeart, Pin, History, Building2, ScanLine, ShieldCheck, BellRing, FileSpreadsheet, Check } from 'lucide-react';
 import html2canvas from 'html2canvas';
 // jsPDF + autoTable are loaded on demand (only when a PDF report is generated) so the main bundle stays well under the PWA precache limit.
 let jsPDF = null;
@@ -10664,13 +10664,50 @@ const DUO_STR = {
     points: ['Made for couples and housemates.', 'Accounts and transactions can be shared or kept private.', 'Each of you keeps your own AI credits.'],
     note: 'Coming soon.' },
 };
+const BIZ_STR = {
+  id: { rowLabel: 'Edisi', personal: 'Personal', business: 'Business', title: 'Revinance Business', soon: 'Segera', close: 'Mengerti',
+    tagline: 'Pencatatan keuangan perusahaan yang berjalan otomatis.',
+    sub: 'Dirancang agar setiap pengeluaran staf tercatat rapi sejak dari sumbernya. Tim Finance menerima data yang siap diperiksa, tanpa input manual satu per satu.',
+    whyTitle: 'Keunggulan Revinance Business',
+    why: [
+      { k: 'scan', t: 'Pencatatan otomatis dari scan', d: 'Staf cukup memotret struk atau notifikasi bank. Nominal, tanggal, vendor, dan kategori terbaca dan tercatat tanpa input manual.' },
+      { k: 'statement', t: 'Mutasi rekening terbaca otomatis', d: 'Unggah mutasi rekening, dan setiap pemasukan serta pengeluaran langsung terbaca dan dikelompokkan, termasuk transaksi dalam mata uang asing.' },
+      { k: 'claim', t: 'Status reimburse yang transparan', d: 'Pantau klaim yang menunggu persetujuan, sudah disetujui, dan sudah dibayar. Semua pihak melihat status yang sama.' },
+      { k: 'cash', t: 'Posisi kas dalam satu tampilan', d: 'Lihat tagihan vendor yang belum dibayar, piutang dari klien, dan pendapatan hari ini, cukup dengan scan transaksi.' },
+      { k: 'report', t: 'Laporan siap unduh', d: 'Unduh laporan keuangan dalam format PDF atau Excel, untuk periode bulanan hingga satu tahun.' },
+      { k: 'proof', t: 'Setiap transaksi berbukti', d: 'Pengeluaran tercatat dari scan atau unggahan, jadi bukti selalu tersimpan dan mudah ditelusuri saat diperlukan.' },
+      { k: 'safe', t: 'Akses terkontrol dan tercatat', d: 'Sampai 5 orang dapat melihat keuangan. Hanya Owner dan Finance yang dapat mengubah data, dan setiap perubahan tercatat.' },
+      { k: 'alert', t: 'Budget dan deteksi anomali', d: 'Pantau budget bulanan dan terima peringatan untuk struk ganda atau pengeluaran yang tidak wajar.' },
+    ],
+    featTitle: 'Fitur yang akan hadir',
+    feats: ['Scan struk dan notifikasi bank', 'Unggah mutasi rekening', 'Multi mata uang', 'Split bill', 'Input manual', 'Alur reimburse', 'Tagihan vendor dan piutang klien', 'Ringkasan pendapatan harian', 'Budget bulanan', 'Kategori otomatis', 'Deteksi anomali', 'Ask Revi untuk perusahaan', 'Dashboard desktop dan tablet', 'Laporan PDF dan Excel', 'Bukti transaksi tersimpan'],
+    note: 'Fitur voice tidak tersedia di Business karena pencatatan perusahaan memerlukan bukti. Segera hadir.' },
+  en: { rowLabel: 'Edition', personal: 'Personal', business: 'Business', title: 'Revinance Business', soon: 'Soon', close: 'Got it',
+    tagline: 'Company expense tracking that runs on its own.',
+    sub: 'Built so every staff expense is recorded cleanly at the source. Your finance team receives data ready for review, with no line-by-line manual entry.',
+    whyTitle: 'Why Revinance Business',
+    why: [
+      { k: 'scan', t: 'Automatic recording from scans', d: 'Staff simply photograph a receipt or bank notification. Amount, date, vendor and category are read and recorded without manual entry.' },
+      { k: 'statement', t: 'Bank statements read automatically', d: 'Upload a bank statement and every income and expense entry is read and categorised instantly, including foreign-currency transactions.' },
+      { k: 'claim', t: 'Transparent reimbursement status', d: 'Track claims that are pending, approved and paid. Everyone sees the same status.' },
+      { k: 'cash', t: 'Your cash position at a glance', d: 'See unpaid vendor bills, client receivables and today’s revenue, just by scanning transactions.' },
+      { k: 'report', t: 'Reports ready to download', d: 'Download financial reports as PDF or Excel, for periods from one month up to a full year.' },
+      { k: 'proof', t: 'Every transaction has proof', d: 'Expenses are recorded from a scan or an upload, so proof is always stored and easy to trace when needed.' },
+      { k: 'safe', t: 'Controlled, audited access', d: 'Up to 5 people can view the finances. Only the Owner and Finance can edit, and every change is logged.' },
+      { k: 'alert', t: 'Budgets and anomaly detection', d: 'Track monthly budgets and get alerts for duplicate receipts or unusual spending.' },
+    ],
+    featTitle: 'Coming up',
+    feats: ['Receipt and bank notification scan', 'Bank statement upload', 'Multi-currency', 'Split bill', 'Manual entry', 'Reimbursement flow', 'Vendor bills and client receivables', 'Daily revenue summary', 'Monthly budgets', 'Automatic categories', 'Anomaly detection', 'Ask Revi for companies', 'Desktop and tablet dashboard', 'PDF and Excel reports', 'Proof of transaction stored'],
+    note: 'Voice is not available in Business because company records require proof. Coming soon.' },
+};
+const BIZ_ICON = { scan: ScanLine, statement: Landmark, claim: Receipt, cash: Wallet, report: FileSpreadsheet, proof: FileText, safe: ShieldCheck, alert: BellRing };
 const t_cancel = (lang) => (lang === 'id' ? 'Batal' : 'Cancel');
 
 function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsNew, userId, userEmail, isPro, t, lang, setLang, theme, onThemeChange, displayName, spaceName, bankName, onSaveProfile, notificationsEnabled, onChangeNotifications, recurringInHome, onChangeRecurringInHome, onExportData, weekStart, onChangeWeekStart, budgetResetDay, onChangeBudgetResetDay, savingsTarget, dailyBudgetText, onOpenDailyBudget, savingsTargetText, onOpenSavingsTarget, emergencyText, onOpenEmergency, proUntil, accountIntent, homeMode, onHomeMode, travelCcy, onTravelCcy, appCcy, onChangeCurrency, appTz, onChangeTimezone, fxAt, fxFailed, fxRefreshing, onRefreshFx, onOpenReminders, onClose, onOpenBudget, onOpenRecurring, graceUntil }) {
   const [editName, setEditName] = useState(displayName || '');
   const [editSpace, setEditSpace] = useState(spaceName || '');
   const [editBank, setEditBank] = useState(bankName || '');
-  const [showDuo, setShowDuo] = useState(false);
+  const [infoPop, setInfoPop] = useState(null); // 'duo' | 'biz' : "coming soon" explainers
   const [savingProfile, setSavingProfile] = useState(false);
   const [staticDoc, setStaticDoc] = useState(null); // 'privacy' | 'terms' | null
   const [showAccount, setShowAccount] = useState(!!accountIntent);
@@ -10692,16 +10729,50 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
       <div className="fc-settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="fc-modal-header"><span>{t.settings}</span><button type="button" className="fc-icon-btn" onClick={onClose}><X size={16} /></button></div>
 
-        {showDuo && (() => { const DU = DUO_STR[lang] || DUO_STR.en; return (
-        <div className="fc-modal-backdrop fc-duo-backdrop" data-testid="duo-popup" onClick={(e) => { e.stopPropagation(); setShowDuo(false); }}>
+        {infoPop === 'biz' && (() => { const BZ = BIZ_STR[lang] || BIZ_STR.en; return (
+        <div className="fc-modal-backdrop fc-duo-backdrop" data-testid="duo-popup" onClick={(e) => { e.stopPropagation(); setInfoPop(null); }}>
+          <div className="fc-duo-pop fc-biz-pop" onClick={(e) => e.stopPropagation()}>
+            <div className="fc-biz-scroll">
+              <div className="fc-biz-badge"><Building2 size={22} /></div>
+              <div className="fc-duo-pop-head"><span>{BZ.title}</span><span className="fc-acc-chip">{BZ.soon}</span></div>
+              <div className="fc-biz-tagline">{BZ.tagline}</div>
+              <p>{BZ.sub}</p>
+              <div className="fc-biz-sec">{BZ.whyTitle}</div>
+              <div className="fc-biz-why">
+                {BZ.why.map((w) => { const Ic = BIZ_ICON[w.k]; return (
+                  <div className="fc-biz-card" key={w.k}><span className="fc-biz-ic"><Ic size={18} /></span><div><b>{w.t}</b><span>{w.d}</span></div></div>); })}
+              </div>
+              <div className="fc-biz-sec">{BZ.featTitle}</div>
+              <div className="fc-biz-feats">{BZ.feats.map((f) => <span key={f} className="fc-biz-feat"><Check size={12} />{f}</span>)}</div>
+              <div className="fc-biz-note">{BZ.note}</div>
+            </div>
+            <button type="button" className="fc-btn-primary" data-testid="duo-close" onClick={() => setInfoPop(null)}>{BZ.close}</button>
+          </div>
+        </div>); })()}
+        {infoPop === 'duo' && (() => { const DU = DUO_STR[lang] || DUO_STR.en; return (
+        <div className="fc-modal-backdrop fc-duo-backdrop" data-testid="duo-popup" onClick={(e) => { e.stopPropagation(); setInfoPop(null); }}>
           <div className="fc-duo-pop" onClick={(e) => e.stopPropagation()}>
             <div className="fc-duo-pop-head"><span>{DU.title}</span><span className="fc-acc-chip">{DU.soon}</span></div>
             <p>{DU.desc}</p>
             <ul>{DU.points.map((x) => <li key={x}>{x}</li>)}</ul>
-            <button type="button" className="fc-btn-primary" data-testid="duo-close" onClick={() => setShowDuo(false)}>{DU.close}</button>
+            <button type="button" className="fc-btn-primary" data-testid="duo-close" onClick={() => setInfoPop(null)}>{DU.close}</button>
           </div>
         </div>); })()}
         <div className="fc-settings-scroll">
+          {(() => { const BZ = BIZ_STR[lang] || BIZ_STR.en; return (<>
+            <div className="fc-settings-group-title">REVINANCE</div>
+            <div className="fc-settings-block" data-testid="edition-block">
+              <div className="fc-settings-row" style={{ cursor: 'default' }}>
+                <span>{BZ.rowLabel}</span>
+                <div className="fc-lang-toggle fc-mode-toggle fc-mode-toggle-text" role="tablist" aria-label={BZ.rowLabel}>
+                  <button type="button" role="tab" aria-selected={true} data-testid="edition-personal" className="fc-lang-active">{BZ.personal}</button>
+                  <span className="fc-lang-sep" aria-hidden="true">|</span>
+                  <button type="button" role="tab" aria-selected={false} data-testid="edition-business" onClick={() => setInfoPop('biz')}>{BZ.business}</button>
+                </div>
+              </div>
+            </div>
+          </>); })()}
+
           <div className="fc-settings-group-title">{t.settingsProfile}</div>
           <div className="fc-settings-block">
             <label className="fc-field"><span>{t.profileName}</span><input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} /></label>
@@ -10722,7 +10793,7 @@ function SettingsPanel({ accounts, transactions, onImportStatement, onOpenWhatsN
             {(() => { const DU = DUO_STR[lang] || DUO_STR.en; return (
               <div className="fc-settings-row" style={{ cursor: 'default' }} data-testid="duo-row">
                 <span>{DU.title}</span>
-                <button type="button" className="fc-duo-soon" data-testid="duo-soon" onClick={() => setShowDuo(true)}>{DU.soon}</button>
+                <button type="button" className="fc-duo-soon" data-testid="duo-soon" onClick={() => setInfoPop('duo')}>{DU.soon}</button>
               </div>); })()}
           </div>
 
@@ -15213,6 +15284,25 @@ select.fc-sheet-ctl { cursor: pointer; }
 .fc-debt-due { font-size: 11px; color: var(--fc-text-dim); margin-top: 6px; }
 .fc-field { display:flex; flex-direction:column; gap: 5px; font-size: 12px; color: var(--fc-text-dim); }
 .fc-field input, .fc-field select { background: var(--fc-surface2); border: 1px solid var(--fc-border); color: var(--fc-text); padding: 9px 10px; border-radius: 11px; font-size: 14px; font-family: 'Calibri','Segoe UI',sans-serif; }
+.fc-mode-toggle.fc-mode-toggle-text { padding: 4px 6px; }
+.fc-mode-toggle.fc-mode-toggle-text button { width: auto; min-width: 0; padding: 0 14px; height: 30px; font-size: 13px; font-weight: 600; font-family: inherit; }
+.fc-mode-toggle.fc-mode-toggle-text button { color: var(--fc-text-dim); opacity: 0.45; }
+.fc-mode-toggle.fc-mode-toggle-text button.fc-lang-active { opacity: 1; color: var(--fc-gold-bright); background: none; box-shadow: none; }
+.fc-biz-pop { max-width: 380px; max-height: 86vh; display: flex; flex-direction: column; padding-bottom: 20px; }
+.fc-biz-scroll { overflow-y: auto; margin: 0 -6px 14px; padding: 0 6px; scrollbar-width: none; }
+.fc-biz-scroll::-webkit-scrollbar { display: none; }
+.fc-biz-badge { width: 46px; height: 46px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: var(--fc-gold-bright); background: rgba(212,175,110,0.14); box-shadow: inset 0 0 0 1px rgba(212,175,110,0.3); }
+.fc-biz-tagline { font-size: 15px; font-weight: 600; color: var(--fc-gold-bright); margin: 0 0 8px; line-height: 1.35; }
+.fc-biz-sec { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fc-text-dim); margin: 18px 0 10px; }
+.fc-biz-why { display: flex; flex-direction: column; gap: 10px; }
+.fc-biz-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 18px; background: var(--fc-surface2); border: 1px solid var(--fc-border); }
+.fc-biz-card b { display: block; font-size: 13.5px; color: var(--fc-text); margin-bottom: 3px; font-weight: 600; }
+.fc-biz-card span { display: block; font-size: 12.5px; line-height: 1.5; color: var(--fc-text-dim); }
+.fc-biz-ic { flex: none; width: 34px; height: 34px; border-radius: 12px; display: flex !important; align-items: center; justify-content: center; color: var(--fc-gold-bright) !important; background: rgba(212,175,110,0.13); }
+.fc-biz-feats { display: flex; flex-wrap: wrap; gap: 7px; }
+.fc-biz-feat { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 6px 11px; border-radius: 999px; color: var(--fc-text); background: var(--fc-surface2); border: 1px solid var(--fc-border); }
+.fc-biz-feat svg { color: var(--fc-gold-bright); flex: none; }
+.fc-biz-note { margin-top: 16px; font-size: 11.5px; line-height: 1.5; color: var(--fc-text-dim); opacity: 0.8; }
 .fc-duo-soon { background: var(--fc-surface2); border: 1px solid var(--fc-border); color: var(--fc-gold-bright); font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; }
 .fc-duo-backdrop { z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .fc-duo-pop { width: 100%; max-width: 340px; background: var(--fc-surface); border: 1px solid var(--fc-border); border-radius: 24px; padding: 24px 22px 22px; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
