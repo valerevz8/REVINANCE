@@ -243,7 +243,7 @@ const T = {
     payInstallment: 'Bayar Cicilan',
     dueDayPick: 'Pilih tanggal', dueDayOpt: '{n}', safeInfoClose: 'Mengerti', safeInfoPeriod: 'Periode ini: {from} – {to}', safeInfoFormula: 'Aman Untuk Dipakai = Saldo − Komitmen − Dicadangkan', safeInfoNow: 'Saat ini',
     infoBalanceTitle: 'Saldo', infoBalanceBody: 'Total saldo dari semua akunmu saat ini.',
-    infoCommittedTitle: 'Komitmen', infoCommittedBody: 'Uang yang sudah punya tujuan: tagihan, cicilan, dan transaksi berulang yang jatuh tempo sampai akhir periode anggaran ini, ditambah semua tagihan kartu atau paylater yang belum dibayar, walau jatuh temponya di periode berikutnya (uangnya sudah terpakai). Tagihan lain untuk periode berikutnya belum dihitung.',
+    infoCommittedTitle: 'Komitmen', infoCommittedBody: 'Uang yang sudah punya tujuan: tagihan, cicilan, dan transaksi berulang yang jatuh tempo sampai akhir periode anggaran ini, termasuk tagihan kartu atau paylater. Yang jatuh temponya di periode berikutnya belum dihitung.',
     infoReservedTitle: 'Dicadangkan', infoReservedBody: 'Sisa anggaran tiap kategori yang belum terpakai pada periode ini. Uang ini disisihkan supaya kebutuhan yang sudah kamu rencanakan tetap aman. Saat anggaran terpakai, jumlah ini ikut berkurang.',
     dueDayLabel: 'Tanggal Jatuh Tempo Tiap Bulan', dueDayHint: 'Cicilan ini otomatis muncul di Akan Datang tiap bulan di tanggal ini. Kalau bulannya lebih pendek (mis. tanggal 31 di Februari), jatuh di hari terakhir bulan itu.',
     principalLabel: 'Pokok / Harga Barang (opsional)', interestLabel: 'Bunga / Fee (%)', interestPeriodLabel: 'Periode Bunga', interestPerMonth: 'per Bulan', interestPerYear: 'per Tahun', tenorUnitMonth: 'Bulan', tenorUnitYear: 'Tahun', tenorLabel: 'Tenor', loanSumTitle: 'Rincian pinjaman', loanSumTotal: 'Total bayar', loanSumInterest: 'Total bunga', loanSumEff: 'Bunga efektif', loanSumFirst: 'Porsi bunga di cicilan pertama', interestBadgeYear: 'Bunga {r}%/thn', interestTypeLabel: 'Jenis Bunga', interestFlat: 'Flat (dari pokok awal)', interestReducing: 'Menurun / Efektif (anuitas)',
@@ -458,7 +458,7 @@ const T = {
     payInstallment: 'Pay Installment',
     dueDayPick: 'Select a day', dueDayOpt: '{n}', safeInfoClose: 'Got it', safeInfoPeriod: 'This period: {from} – {to}', safeInfoFormula: 'Safe to Spend = Balance − Committed − Reserved', safeInfoNow: 'Right now',
     infoBalanceTitle: 'Balance', infoBalanceBody: 'The total balance across all your accounts right now.',
-    infoCommittedTitle: 'Committed', infoCommittedBody: 'Money that already has a purpose: bills, installments and recurring payments due until the end of this budget period, plus ALL unpaid card or paylater bills, even when they fall in the next period (the money is already spent). Other bills for the next period are not counted yet.',
+    infoCommittedTitle: 'Committed', infoCommittedBody: 'Money that already has a purpose: bills, installments and recurring payments due until the end of this budget period, including card and paylater bills. Anything that falls due in the next period is not counted yet.',
     infoReservedTitle: 'Reserved', infoReservedBody: 'The unspent budget left in each category for this period. It is set aside so the needs you planned for stay covered. As you spend, this amount shrinks.',
     dueDayLabel: 'Due Day Each Month', dueDayHint: 'This installment will automatically show up in Upcoming every month on this day. In shorter months (e.g. the 31st in February) it falls on the last day of that month.',
     principalLabel: 'Principal / Item Price (optional)', interestLabel: 'Interest / Fee (%)', interestPeriodLabel: 'Interest Period', interestPerMonth: 'per Month', interestPerYear: 'per Year', tenorUnitMonth: 'Months', tenorUnitYear: 'Years', tenorLabel: 'Tenor', loanSumTitle: 'Loan summary', loanSumTotal: 'Total payment', loanSumInterest: 'Total interest', loanSumEff: 'Effective rate', loanSumFirst: 'Interest share of 1st payment', interestBadgeYear: '{r}%/yr interest', interestTypeLabel: 'Interest Type', interestFlat: 'Flat (on original principal)', interestReducing: 'Reducing balance (annuity)',
@@ -5807,10 +5807,10 @@ function Dashboard({ recurringInHome = true, spaceName, homeMode, onHomeMode, da
   // (otherwise Safe-to-spend would look higher than it really is until the bill gets close).
   // This counts EVERY unpaid card/paylater balance, also bills that fall after this budget period: the money was spent, the bank balance did not move, and the
   // purchase already used this period's category budget. Leaving it out made Safe-to-spend go UP after logging a card purchase.
-  const upcomingDebtIds = new Set(upcomingCycle.filter(r => r.source === 'debt').map(r => r.debtId));
   // ALL unpaid card/paylater balances count, even when the bill falls after this budget period: the purchase already ate this period's category budget
   // (reserved goes down) while the bank balance did not move, so leaving it out made Safe-to-spend go UP every time a card purchase was logged.
-  const cardOwed = (debts || []).filter(d => d.debtType === 'card' && Number(d.remaining) > 0 && !upcomingDebtIds.has(d.id)).reduce((s, d) => s + Number(d.remaining), 0);
+  // Strictly per budget period: a card / paylater bill is committed only when it falls due INSIDE this period (it is already in upcomingCycle then). Later bills belong to the next period.
+  const cardOwed = 0;
   const committedUpcoming = upcomingCycle.reduce((s, r) => s + Number(r.amount || 0), 0) + cardOwed;
   // Receivables to collect — shown alongside bills but excluded from committedUpcoming above.
   const upcomingReceivables = buildUpcomingReceivables(receivables, today, 14);
