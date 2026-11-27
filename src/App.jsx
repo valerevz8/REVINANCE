@@ -1633,6 +1633,44 @@ function cardFeeCalc(amount, interestStr, adminStr, mergesIntoBill, cur, tenor) 
   const monthly = roundCcy((a + interest) / n, cur);
   return { interest, admin, tenor: n, monthly, first: roundCcy(monthly + admin, cur), total: roundCcy(a + interest + admin, cur) };
 }
+// Paylater statement cycle: purchases up to the CUTOFF day close into one statement; that statement is due on the next DUE day after the cutoff.
+// cutoff 31 = month end (calendar month). Days are clamped to short months.
+function cycleDueDate(purchaseISO, cutoff, dueDay) {
+  const [y, m, d] = String(purchaseISO).split('-').map(Number);
+  if (!y || !m || !d || !(cutoff >= 1) || !(dueDay >= 1)) return null;
+  const at = (yy, mm0, day) => { const ty = yy + Math.floor(mm0 / 12); const tm = ((mm0 % 12) + 12) % 12; return Date.UTC(ty, tm, Math.min(day, new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate())); };
+  let S = at(y, m - 1, cutoff); if (S < Date.UTC(y, m - 1, d)) S = at(y, m, cutoff);
+  const sd = new Date(S); const sy = sd.getUTCFullYear(), sm = sd.getUTCMonth();
+  let D = at(sy, sm, dueDay); if (D <= S) D = at(sy, sm + 1, dueDay);
+  const dd = new Date(D); return `${dd.getUTCFullYear()}-${String(dd.getUTCMonth() + 1).padStart(2, '0')}-${String(dd.getUTCDate()).padStart(2, '0')}`;
+}
+function cardCycleOf(bills, name, cur) {
+  const nm = String(name || '').trim().toLowerCase(); if (!nm) return null;
+  const hit = (bills || []).filter(b => b.debtType === 'card' && !(Number(b.tenorMonths) > 1) && b.name.trim().toLowerCase() === nm && b.currency === cur && b.cardCutoffDay && b.cardDueDay).sort((a, b) => String(b.dueDate || '').localeCompare(String(a.dueDate || '')))[0];
+  return hit ? { cutoff: hit.cardCutoffDay, due: hit.cardDueDay } : null;
+}
+function CardCycleFields({ CS, cutoff, due, onCutoff, onDue, testId }) {
+  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  return (
+    <div className="fc-field" data-testid={testId}>
+      <div className="fc-sur-row">
+        <label className="fc-field"><span>{CS.cycleCutoff}</span>
+          <select value={String(cutoff || '')} onChange={(e) => onCutoff(e.target.value)} data-testid={`${testId}-cutoff`}>
+            <option value="">{CS.cyclePick}</option>
+            {days.map(n => <option key={n} value={String(n)}>{n === 31 ? CS.cycleEom : n}</option>)}
+          </select>
+        </label>
+        <label className="fc-field"><span>{CS.cycleDue}</span>
+          <select value={String(due || '')} onChange={(e) => onDue(e.target.value)} data-testid={`${testId}-due`}>
+            <option value="">{CS.cyclePick}</option>
+            {days.map(n => <option key={n} value={String(n)}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="fc-field-note">{CS.cycleHint}</div>
+    </div>
+  );
+}
 // Paylater / card picker (tap a provider instead of typing the name every time). Brand colours are only a hint; the circle is a monogram, not a logo.
 const PAYLATER_PRESETS = [
   { name: 'Spaylater', mono: 'SP', bg: '#C8623D' }, { name: 'Kredivo', mono: 'KR', bg: '#3E6BC4' }, { name: 'Gopaylater', mono: 'GP', bg: '#3B9CC2' },
@@ -1710,9 +1748,9 @@ function CardFeeFields({ CS, cur, amount, interest, admin, tenor, onTenor, onInt
 }
 const CARD_STR = {
   id: { pickCard: 'Pilih kartu / paylater', otherCard: 'Paylater lain', otherCardSub: 'Isi nama sendiri', owedNow: (a) => `utang ${a}`, createdOnSave: 'dibuat saat dicatat', pickCardHint: 'Pilih salah satu atau isi paylater lain.', bulkEstTitle: 'Perhitungan otomatis', bulkEstPrincipal: (n) => `Pokok (${n} item)`, bulkEstInterest: 'Bunga', bulkEstAdmin: 'Biaya admin', bulkEstTotal: 'Total tagihan', bulkEstMonthly: 'Cicilan per bulan', bulkEstFirst: 'Bulan pertama (+admin)', billNote: 'Sudah dihitung sebagai pengeluaran saat belanja.', tenor: 'Tenor', tenorOnce: 'Bayar bulan depan (tanpa cicilan)', tenorMonths: 'bulan', feeInterestFlat: 'Bunga flat per bulan (%)', planEst: (n, m, first, tot, hasAdmin, due) => `Cicilan ${m}/bulan × ${n} bulan${hasAdmin ? `. Bulan pertama ${first} (termasuk admin)` : ''}. Total ${tot}. Tagihan pertama jatuh tempo ${due}, berikutnya otomatis tiap bulan.`, feeInterest: 'Bunga per bulan (%)', feeAdmin: 'Biaya admin', feeAdminOnce: 'Biaya admin sudah dikenakan di tagihan ini.', feeEst: (tot, a, i, ad, due) => `Perkiraan tagihan akhir ${tot} (pokok ${a} + bunga ${i} + admin ${ad}), jatuh tempo ${due}. Bunga dan admin digabung ke transaksi ini, jadi tetap satu transaksi dan satu tagihan.`, feeNote: 'Bunga & admin', via: 'Dibayar pakai', viaAccount: 'Akun', viaCard: 'CC / Paylater', cardName: 'Nama kartu / paylater', cardNamePh: 'mis. BCA Visa, Kredivo, SPayLater', due: 'Jatuh tempo tagihan', badge: 'Kartu / Paylater', bulkFeeNote: 'Tenor, bunga, dan admin berlaku untuk semua item yang dipilih. Admin dikenakan sekali per tagihan, atau per item kalau tenor lebih dari 1 bulan. Kosongkan kalau tidak ada.', bulkAll: 'Semua pakai CC / Paylater', bulkAcct: 'Semua pakai akun', bulkApply: 'Terapkan', needCard: 'Isi nama kartu dan jatuh tempo untuk item CC / Paylater.', autoDue: 'otomatis',
-    info: (amt, due) => `Saldo akun tidak berubah. Tagihan ${amt} akan muncul di Hutang dan Upcoming, jatuh tempo ${due}.`, merge: (n) => `Masuk ke tagihan ${n} yang sudah ada.`, dueBeforeDate: 'Jatuh tempo tidak boleh sebelum tanggal transaksi.', locked: (n, d) => `Dibayar pakai ${n} (jatuh tempo ${d}). Metode bayar tidak bisa diubah.`, onCard: 'CC / Paylater' },
+    info: (amt, due) => `Saldo akun tidak berubah. Tagihan ${amt} akan muncul di Hutang dan Upcoming, jatuh tempo ${due}.`, cycleCutoff: 'Tanggal cutoff', cycleDue: 'Jatuh tempo (tanggal)', cyclePick: 'Pilih', cycleEom: '31 / akhir bulan', cycleHint: 'Belanja sampai tanggal cutoff digabung jadi satu tagihan. Isi sekali, belanja berikutnya otomatis masuk tagihan yang sama.', merge: (n) => `Masuk ke tagihan ${n} yang sudah ada.`, dueBeforeDate: 'Jatuh tempo tidak boleh sebelum tanggal transaksi.', locked: (n, d) => `Dibayar pakai ${n} (jatuh tempo ${d}). Metode bayar tidak bisa diubah.`, onCard: 'CC / Paylater' },
   en: { pickCard: 'Choose card / paylater', otherCard: 'Other paylater', otherCardSub: 'Enter your own name', owedNow: (a) => `owed ${a}`, createdOnSave: 'created when saved', pickCardHint: 'Pick one or enter another paylater.', bulkEstTitle: 'Automatic calculation', bulkEstPrincipal: (n) => `Principal (${n} items)`, bulkEstInterest: 'Interest', bulkEstAdmin: 'Admin fee', bulkEstTotal: 'Total bill', bulkEstMonthly: 'Installment per month', bulkEstFirst: 'First month (+admin)', billNote: 'Already counted as spending when purchased.', tenor: 'Tenor', tenorOnce: 'Pay next month (no installments)', tenorMonths: 'months', feeInterestFlat: 'Flat interest per month (%)', planEst: (n, m, first, tot, hasAdmin, due) => `${m}/month × ${n} months${hasAdmin ? `. First month ${first} (incl. admin)` : ''}. Total ${tot}. First bill due ${due}, then every month automatically.`, feeInterest: 'Interest per month (%)', feeAdmin: 'Admin fee', feeAdminOnce: 'The admin fee is already charged on this bill.', feeEst: (tot, a, i, ad, due) => `Estimated final bill ${tot} (principal ${a} + interest ${i} + admin ${ad}), due ${due}. Interest and admin are merged into this transaction, so it stays one transaction and one bill.`, feeNote: 'Interest & admin', via: 'Paid with', viaAccount: 'Account', viaCard: 'Credit card / Paylater', cardName: 'Card / paylater name', cardNamePh: 'e.g. BCA Visa, Kredivo, SPayLater', due: 'Bill due date', badge: 'Card / Paylater', bulkFeeNote: 'Tenor, interest and admin apply to every selected item. Admin is charged once per bill, or per item when the tenor is more than 1 month. Leave blank if none.', bulkAll: 'All on credit card / Paylater', bulkAcct: 'All on account', bulkApply: 'Apply', needCard: 'Enter the card name and due date for the card / Paylater items.', autoDue: 'auto',
-    info: (amt, due) => `Your account balance will not change. A ${amt} bill will appear under Debts and Upcoming, due ${due}.`, merge: (n) => `Added to your existing ${n} bill.`, dueBeforeDate: 'Due date cannot be before the transaction date.', locked: (n, d) => `Paid with ${n} (due ${d}). The payment method cannot be changed.`, onCard: 'Card / Paylater' },
+    info: (amt, due) => `Your account balance will not change. A ${amt} bill will appear under Debts and Upcoming, due ${due}.`, cycleCutoff: 'Cutoff day', cycleDue: 'Due day', cyclePick: 'Select', cycleEom: '31 / month end', cycleHint: 'Purchases up to the cutoff day are combined into one bill. Set it once and later purchases join the same bill automatically.', merge: (n) => `Added to your existing ${n} bill.`, dueBeforeDate: 'Due date cannot be before the transaction date.', locked: (n, d) => `Paid with ${n} (due ${d}). The payment method cannot be changed.`, onCard: 'Card / Paylater' },
 };
 
 // RAW transaction row: `amount` + `currency` are the ORIGINAL facts (never overwritten);
@@ -1808,6 +1846,7 @@ function mapDebtRow(row) {
     principal: row.principal != null ? Number(row.principal) : null, interestRate: row.interest_rate != null ? Number(row.interest_rate) : null, interestType: row.interest_type || null, interestPeriod: row.interest_period === 'year' ? 'year' : 'month',
     currency: isCcy(row.currency) ? row.currency : 'IDR', // total / remaining / monthlyPlan are in THIS currency (native)
     cardInterestPct: row.card_interest_pct != null ? Number(row.card_interest_pct) : null, cardAdminFee: row.card_admin_fee != null ? Number(row.card_admin_fee) : null, // card / paylater only
+    cardCutoffDay: row.card_cutoff_day != null ? Number(row.card_cutoff_day) : null, cardDueDay: row.card_due_day != null ? Number(row.card_due_day) : null,
   };
 }
 // Piutang (receivables) is a separate concept/table from Hutang — money owed TO the user,
@@ -3257,18 +3296,20 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
       if (!nm || !/^\d{4}-\d{2}-\d{2}$/.test(String(due)) || !(n > 0)) return { error: { message: 'card_info_missing' } };
       // Read the bill fresh from the database: several drafts saved in one loop must each see the previous draft's total (React state is stale mid-loop).
       const tenor = Math.max(1, Math.min(60, parseInt(tx.card.tenor, 10) || 1));
+      const cycCut = Math.max(0, Math.min(31, parseInt(tx.card.cutoffDay, 10) || 0)), cycDue = Math.max(0, Math.min(31, parseInt(tx.card.dueDay, 10) || 0));
       let existing = null;
       { const { data: rows } = await supabase.from('finance_debts').select('*').eq('user_id', userId).eq('debt_type', 'card').eq('currency', cur).eq('due_date', due);
         const hit = tenor > 1 ? null : (rows || []).find(r => String(r.name || '').trim().toLowerCase() === nm.toLowerCase() && !(Number(r.tenor_months) > 1));
-        if (hit) existing = { id: hit.id, total: Number(hit.total), remaining: Number(hit.remaining) }; }
+        if (hit) existing = { id: hit.id, total: Number(hit.total), remaining: Number(hit.remaining), cut: hit.card_cutoff_day, dueDay: hit.card_due_day }; }
       const feePct = Math.max(0, Math.min(100, Number(tx.card.interestPct) || 0)), feeAdmin = Math.max(0, Number(tx.card.adminFee) || 0);
       if (existing) {
         // Interest on this purchase is folded into the SAME transaction and the SAME bill (one unit, one record): no separate fee expense.
         const feeEx = roundCcy(n * feePct / 100, cur);
         const total = roundCcy(Number(existing.total) + n + feeEx, cur), remaining = roundCcy(Number(existing.remaining) + n + feeEx, cur);
-        const { error: ce } = await supabase.from('finance_debts').update({ total, remaining }).eq('id', existing.id);
+        const cyc = cycCut && cycDue && (existing.cut !== cycCut || existing.dueDay !== cycDue) ? { card_cutoff_day: cycCut, card_due_day: cycDue } : null;
+        const { error: ce } = await supabase.from('finance_debts').update({ total, remaining, ...(cyc || {}) }).eq('id', existing.id);
         if (ce) { console.error('card bill update failed:', ce); return { error: ce }; }
-        setDebts(prev => prev.map(d => d.id === existing.id ? { ...d, total, remaining } : d));
+        setDebts(prev => prev.map(d => d.id === existing.id ? { ...d, total, remaining, ...(cyc ? { cardCutoffDay: cycCut, cardDueDay: cycDue } : {}) } : d));
         cardFeeAmt = feeEx;
         cardBillId = existing.id;
       } else {
@@ -3276,7 +3317,7 @@ function FinanceApp({ session, theme, onThemeChange, subInfo }) {
         const fc = cardFeeCalc(n, feePct, feeAdmin, false, cur, tenor);
         const feeNew = tenor > 1 ? 0 : roundCcy(n * feePct / 100, cur) + roundCcy(feeAdmin, cur);
         const billTotal = tenor > 1 ? fc.total : roundCcy(n + feeNew, cur);
-        const { data: nb, error: ce } = await supabase.from('finance_debts').insert({ user_id: userId, name: nm, total: billTotal, remaining: billTotal, monthly_plan: tenor > 1 ? fc.monthly : null, tenor_months: tenor > 1 ? tenor : null, principal: tenor > 1 ? n : null, interest_rate: tenor > 1 && feePct ? feePct : null, interest_type: tenor > 1 && feePct ? 'flat' : null, interest_period: tenor > 1 && feePct ? 'month' : null, due_date: due, reminders: ['H-3', 'H'], debt_type: 'card', currency: cur, card_interest_pct: feePct || null, card_admin_fee: feeAdmin || null }).select().single();
+        const { data: nb, error: ce } = await supabase.from('finance_debts').insert({ user_id: userId, name: nm, total: billTotal, remaining: billTotal, monthly_plan: tenor > 1 ? fc.monthly : null, tenor_months: tenor > 1 ? tenor : null, principal: tenor > 1 ? n : null, interest_rate: tenor > 1 && feePct ? feePct : null, interest_type: tenor > 1 && feePct ? 'flat' : null, interest_period: tenor > 1 && feePct ? 'month' : null, due_date: due, reminders: ['H-3', 'H'], debt_type: 'card', currency: cur, card_interest_pct: feePct || null, card_admin_fee: feeAdmin || null, ...(tenor <= 1 && cycCut && cycDue ? { card_cutoff_day: cycCut, card_due_day: cycDue } : {}) }).select().single();
         if (ce || !nb) { console.error('card bill create failed:', ce); return { error: ce || { message: 'card_bill_failed' } }; }
         setDebts(prev => [...prev, mapDebtRow(nb)]);
         cardBillId = nb.id; cardCreated = true;
@@ -9160,7 +9201,11 @@ function TxModal({ trips, t, lang, debts, accounts, investBudgets, presetDebtId,
   const cardNames = [...new Set(cardBills.map(d => d.name))];
   const sameCard = (d) => cardName.trim() && d.name.trim().toLowerCase() === cardName.trim().toLowerCase() && d.currency === currency && !(Number(d.tenorMonths) > 1);
   const openBill = cardBills.filter(d => sameCard(d) && d.dueDate && d.dueDate >= date).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] || null;
-  const suggestedDue = openBill ? openBill.dueDate : addMonthsISO(date, 1);
+  const [cycCutIn, setCycCutIn] = useState(undefined); const [cycDueIn, setCycDueIn] = useState(undefined);
+  const savedCycle = cardCycleOf(cardBills, cardName, currency);
+  const cycCut = Number(cycCutIn !== undefined ? cycCutIn : savedCycle?.cutoff) || 0, cycDueDay = Number(cycDueIn !== undefined ? cycDueIn : savedCycle?.due) || 0;
+  const cycleDue = cycCut && cycDueDay ? cycleDueDate(date, cycCut, cycDueDay) : null;
+  const suggestedDue = cycleDue || (openBill ? openBill.dueDate : addMonthsISO(date, 1));
   const cardDue = dueTouched ? cardDueInput : suggestedDue;
   const isCard = type === 'expense' && payVia === 'card' && !isEdit;
   const feeDef = cardFeeDefaults(cardBills, cardName, currency);
@@ -9168,6 +9213,7 @@ function TxModal({ trips, t, lang, debts, accounts, investBudgets, presetDebtId,
   const [feeInterest, setFeeInterest] = useState(undefined); const [feeAdmin, setFeeAdmin] = useState(undefined);
   const feeI = feeInterest !== undefined ? feeInterest : feeDef.interest, feeA = feeAdmin !== undefined ? feeAdmin : feeDef.admin;
   const mergesBill = feeTenor <= 1 && !!openBill && cardDue === openBill.dueDate;
+  const cycleOn = feeTenor <= 1 && cycCut > 0 && cycDueDay > 0;
   // Soft warning only — never blocks. Holds the built payload while the user decides
   // between "Set Investment Plan" and "Continue"; existing investment calculations untouched.
   const [pendingInvestPayload, setPendingInvestPayload] = useState(null);
@@ -9199,7 +9245,7 @@ function TxModal({ trips, t, lang, debts, accounts, investBudgets, presetDebtId,
     if (!fxReady(txCur, 'IDR') || (selAcc && !fxReady(txCur, selAcc.currency)) || (type === 'debt_payment' && payDebtId && !fxReady(txCur, debtCurOf(debtId)))) { setFxError(true); return; }
     setFxError(false);
     const payload = { type, date, amount: Number(amount), currency: txCur, note, category: type === 'debt_payment' ? null : finalCategory, debtId: type === 'debt_payment' ? payDebtId : (editingCard ? editingTx.debtId : null), accountId: (isCard || editingCard) ? null : (accountId || null), tripId: type === 'expense' && tripId ? tripId : null };
-    if (isCard) payload.card = { name: cardName.trim(), dueDate: cardDue, interestPct: Number(feeI) || 0, adminFee: Number(feeA) || 0, tenor: feeTenor };
+    if (isCard) payload.card = { name: cardName.trim(), dueDate: cardDue, interestPct: Number(feeI) || 0, adminFee: Number(feeA) || 0, tenor: feeTenor, ...(cycleOn ? { cutoffDay: cycCut, dueDay: cycDueDay } : {}) };
     if (!isEdit && receiptPath) payload.receiptPath = receiptPath;
     if (isEdit) payload.id = editingTx.id;
     // Investment Plan check: only for actual investment assets, only when adding/editing an
@@ -9269,6 +9315,7 @@ function TxModal({ trips, t, lang, debts, accounts, investBudgets, presetDebtId,
         {isCard && (
           <>
             <CardProviderPicker CS={CS} value={cardName} onChange={setCardName} bills={cardBills} testId="card-name" />
+            {feeTenor <= 1 && <CardCycleFields CS={CS} cutoff={cycCut || ''} due={cycDueDay || ''} onCutoff={(v) => { setCycCutIn(v); setDueTouched(false); }} onDue={(v) => { setCycDueIn(v); setDueTouched(false); }} testId="card-cycle" />}
             <label className="fc-field"><span>{CS.due}</span>
               <input type="date" value={cardDue} min={date} onChange={(e) => { setDueTouched(true); setCardDueInput(e.target.value); }} data-testid="card-due" required />
               {cardDue && cardDue < date && <div className="fc-field-warning">{CS.dueBeforeDate}</div>}
@@ -12560,6 +12607,11 @@ const VOICE_MAX_SECONDS = 60;
 const isCardDraft = (d) => d.type === 'expense' && d.payVia === 'card';
 function draftCardDue(d, bills) {
   if (d.cardDue) return d.cardDue;
+  if (!(Number(d.cardTenor) > 1)) {
+    const sc = cardCycleOf(bills, d.cardName, d.currency);
+    const cc = Number(d.cardCutoff !== undefined ? d.cardCutoff : sc?.cutoff) || 0, dd = Number(d.cardDueDay !== undefined ? d.cardDueDay : sc?.due) || 0;
+    const cd = cc && dd ? cycleDueDate(d.date, cc, dd) : null; if (cd) return cd;
+  }
   const nm = String(d.cardName || '').trim().toLowerCase();
   const open = nm && !(Number(d.cardTenor) > 1) ? (bills || []).filter(b => b.debtType === 'card' && !(Number(b.tenorMonths) > 1) && b.name.trim().toLowerCase() === nm && b.currency === d.currency && b.dueDate && b.dueDate >= d.date).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] : null;
   return open ? open.dueDate : addMonthsISO(d.date, 1);
@@ -12732,7 +12784,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
       amount: Number(d.amount), currency: isCcy(d.currency) ? d.currency : APP_CCY, date: d.date, note: d.name + (d.note ? ` — ${d.note}` : ''),
       accountId: isCardDraft(d) ? null : (d.accountId || null), debtId: null, receiptPath: d.receiptPath || null,
       ...(d.xfer && d.xfer.on ? { transfer: { toId: d.xfer.existingId, toName: d.xfer.name, toType: d.xfer.type, fee: d.xfer.fee || 0, amount: roundCcy(Number(d.amount) - (d.xfer.fee || 0), isCcy(d.currency) ? d.currency : APP_CCY), note: d.name } } : {}),
-      ...(isCardDraft(d) ? { card: { name: String(d.cardName).trim().replace(/\s+/g, ' ').slice(0, 40), dueDate: draftCardDue(d, cardBillsAll), interestPct: Number(d.cardInterest !== undefined ? d.cardInterest : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).interest) || 0, adminFee: Number(d.cardAdmin !== undefined ? d.cardAdmin : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).admin) || 0, tenor: Number(d.cardTenor) || 1 } } : {}),
+      ...(isCardDraft(d) ? { card: { name: String(d.cardName).trim().replace(/\s+/g, ' ').slice(0, 40), dueDate: draftCardDue(d, cardBillsAll), interestPct: Number(d.cardInterest !== undefined ? d.cardInterest : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).interest) || 0, adminFee: Number(d.cardAdmin !== undefined ? d.cardAdmin : cardFeeDefaults(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY).admin) || 0, tenor: Number(d.cardTenor) || 1, ...(!(Number(d.cardTenor) > 1) ? (() => { const sc = cardCycleOf(cardBillsAll, d.cardName, isCcy(d.currency) ? d.currency : APP_CCY); const cc = Number(d.cardCutoff !== undefined ? d.cardCutoff : sc?.cutoff) || 0, dd = Number(d.cardDueDay !== undefined ? d.cardDueDay : sc?.due) || 0; return cc && dd ? { cutoffDay: cc, dueDay: dd } : {}; })() : {}) } } : {}),
     }));
     try {
       const failed = (await onSaveAll(payloads)) || [];
@@ -12834,6 +12886,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
                 ) : (
                   <div className="fc-field" style={{ marginBottom: 6 }}>
                     <CardProviderPicker CS={CS} value={bulk.name} onChange={(v) => setBulk({ ...bulk, name: v })} bills={cardBillsAll} testId="bulk-name" />
+                    {(() => { const sc = cardCycleOf(cardBillsAll, bulk.name, APP_CCY); return Number(bulk.tenor) > 1 ? null : <CardCycleFields CS={CS} cutoff={bulk.cutoff !== undefined ? bulk.cutoff : (sc ? sc.cutoff : '')} due={bulk.dueDay !== undefined ? bulk.dueDay : (sc ? sc.due : '')} onCutoff={(v) => setBulk({ ...bulk, cutoff: v })} onDue={(v) => setBulk({ ...bulk, dueDay: v })} testId="bulk-cycle" />; })()}
                     <label className="fc-field" style={{ marginTop: 10 }}><span>{CS.due} ({CS.autoDue})</span>
                       <input type="date" value={bulk.due} onChange={(e) => setBulk({ ...bulk, due: e.target.value })} data-testid="bulk-due" />
                     </label>
@@ -12857,7 +12910,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
                       const nm = String(bulk.name || '').trim().toLowerCase(); const by = {}; const seenBill = new Set();
                       its.forEach(d => {
                         const cur = isCcy(d.currency) ? d.currency : APP_CCY;
-                        const due = draftCardDue({ ...d, currency: cur, cardName: bulk.name, cardDue: bulk.due || '', cardTenor: ten }, cardBillsAll);
+                        const due = draftCardDue({ ...d, currency: cur, cardName: bulk.name, cardDue: bulk.due || '', cardTenor: ten, ...(bulk.cutoff ? { cardCutoff: bulk.cutoff } : {}), ...(bulk.dueDay ? { cardDueDay: bulk.dueDay } : {}) }, cardBillsAll);
                         const existing = ten <= 1 && !!nm && cardBillsAll.some(b => b.debtType === 'card' && !(Number(b.tenorMonths) > 1) && b.name.trim().toLowerCase() === nm && b.currency === cur && b.dueDate === due);
                         const key = `${nm}|${cur}|${due}`; const merges = ten <= 1 && (existing || seenBill.has(key)); if (ten <= 1) seenBill.add(key);
                         const f = cardFeeCalc(d.amount, pctN, admN, merges, cur, ten);
@@ -12882,7 +12935,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
                     <div className="fc-field-note" style={{ marginTop: 6 }}>{CS.bulkFeeNote}</div>
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                       <button type="button" className="fc-btn-ghost" onClick={() => setBulk(null)}>{t.cancel}</button>
-                      <button type="button" className="fc-btn-primary" data-testid="bulk-apply" disabled={!bulk.name.trim()} onClick={() => { const nm = bulk.name.trim(); setDrafts(prev => prev.map(d => d.selected && d.type === 'expense' ? { ...d, payVia: 'card', cardName: nm, cardDue: bulk.due || '', cardTenor: Number(bulk.tenor) || 1, ...(bulk.interest !== '' ? { cardInterest: bulk.interest } : {}), ...(bulk.admin !== '' && bulk.admin != null ? { cardAdmin: String(bulk.admin) } : {}) } : d)); setBulk(null); }}>{CS.bulkApply}</button>
+                      <button type="button" className="fc-btn-primary" data-testid="bulk-apply" disabled={!bulk.name.trim()} onClick={() => { const nm = bulk.name.trim(); setDrafts(prev => prev.map(d => d.selected && d.type === 'expense' ? { ...d, payVia: 'card', cardName: nm, cardDue: bulk.due || '', cardTenor: Number(bulk.tenor) || 1, ...(bulk.cutoff ? { cardCutoff: bulk.cutoff } : {}), ...(bulk.dueDay ? { cardDueDay: bulk.dueDay } : {}), ...(bulk.interest !== '' ? { cardInterest: bulk.interest } : {}), ...(bulk.admin !== '' && bulk.admin != null ? { cardAdmin: String(bulk.admin) } : {}) } : d)); setBulk(null); }}>{CS.bulkApply}</button>
                     </div>
                   </div>
                 )}
@@ -12952,6 +13005,7 @@ function VoiceCaptureModal({ t, lang, accounts, debts, existingTx, onClose, onSa
               {isCardDraft(editing) && (
                 <>
                   <CardProviderPicker CS={CS} value={editing.cardName || ''} onChange={(v) => updateDraft(editingIdx, { cardName: v })} bills={cardBillsAll} testId="draft-card-name" />
+                  {!(Number(editing.cardTenor) > 1) && (() => { const sc = cardCycleOf(cardBillsAll, editing.cardName, isCcy(editing.currency) ? editing.currency : APP_CCY); return <CardCycleFields CS={CS} cutoff={editing.cardCutoff !== undefined ? editing.cardCutoff : (sc ? sc.cutoff : '')} due={editing.cardDueDay !== undefined ? editing.cardDueDay : (sc ? sc.due : '')} onCutoff={(v) => updateDraft(editingIdx, { cardCutoff: v, cardDue: '' })} onDue={(v) => updateDraft(editingIdx, { cardDueDay: v, cardDue: '' })} testId="draft-card-cycle" />; })()}
                   <label className="fc-field"><span>{CS.due}</span>
                     <input type="date" value={draftCardDue(editing, cardBillsAll)} min={editing.date} onChange={(e) => updateDraft(editingIdx, { cardDue: e.target.value })} data-testid="draft-card-due" required />
                     {draftCardDue(editing, cardBillsAll) < editing.date && <div className="fc-field-warning">{CS.dueBeforeDate}</div>}
